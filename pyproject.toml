@@ -1,0 +1,9 @@
+[project]
+name = "multi-asset-fund"
+version = "0.1.0"
+description = "Multi-asset AI fund: persona-conditioned agents with performance-based weighting"
+requires-python = ">=3.11"
+dependencies = [
+  "pandas>=2.0", "numpy>=1.26", "requests>=2.31",
+  "yfinance>=0.2.40", "pyyaml>=6.0", "pydantic>=2.6",
+]
