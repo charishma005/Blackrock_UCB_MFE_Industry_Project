@@ -15,8 +15,11 @@ dynamic agent weighting ("firing"), and persona conditioning from primary source
 1. **Multi-asset agent universe** — `Instrument`/`AssetClass` abstraction routes
    fixed income (TLT/IEF/LQD/HYG), commodities (GC/CL/HG), and FRED macro series
    to agents that cover them. Macro agents emit a *regime* consumed as context
-   by the whole book, not just per-ticker signals. (`src/instruments.py`,
-   `src/data/markets.py`, `src/agents/ray_dalio.py`)
+   by the whole book, not just per-ticker signals. Equity fundamentals come from
+   a pluggable data layer with three interchangeable sources — `yfinance`
+   (free, no point-in-time history), `financialdatasets.ai` (paid, point-in-time),
+   and `wrds` (Compustat/CRSP, point-in-time). (`src/instruments.py`,
+   `src/data/markets.py`, `src/data/equities*.py`, `src/agents/ray_dalio.py`)
 2. **Full portfolio metrics** — Sharpe, Sortino, Calmar, max drawdown, hit rate,
    turnover, Spearman IC. (`src/backtest/metrics.py`)
 3. **Attribution + firing** — every agent gets a paper portfolio; rolling Sharpe
@@ -33,26 +36,50 @@ dynamic agent weighting ("firing"), and persona conditioning from primary source
 - [x] Metrics module
 - [x] Attribution tracker + weight manager
 - [x] Agent base class + persona loading
-- [x] Ray Dalio macro regime agent (Phase 1 complete; wire LLM client)
-- [ ] Port Warren Buffett + Aswath Damodaran agents from upstream (keep MIT header)
-- [ ] Multi-asset risk manager (vol + cross-asset correlation limits)
-- [ ] LLM Portfolio Manager consuming weighted signals + regime context
-- [ ] Backtest engine (daily loop) + benchmark comparison study
-- [ ] Persona distillation script (transcripts -> YAML)
+- [x] Ray Dalio macro regime agent (wired to LLM client)
+- [x] Port Warren Buffett + Aswath Damodaran agents from upstream (MIT header kept)
+- [x] Multi-asset risk manager (vol + cross-asset correlation limits)
+- [x] LLM Portfolio Manager consuming weighted signals + regime context
+      (also a `mechanical` PM mode; select via `--pm-mode`)
+- [x] Backtest engine (weekly/daily loop) + 3-way benchmark comparison study
+- [x] Point-in-time equity data via `financialdatasets.ai` and WRDS
+- [x] Persona specs committed (`src/agents/personas/*.yaml`)
+- [ ] Persona distillation script (transcripts -> YAML) — specs are hand-authored for now
 - [ ] Fixed-income agent (Gundlach-style: duration, curve, credit)
 - [ ] Commodities agent (COT positioning + trend)
 
 ## Setup
 
 ```bash
-pip install pandas numpy requests yfinance pyyaml pydantic
-export FRED_API_KEY=...        # free: fred.stlouisfed.org
-export ANTHROPIC_API_KEY=...   # for LLM agents
-python -m src.main --start 2024-01-01 --end 2024-12-31
+pip install pandas numpy requests yfinance pyyaml pydantic anthropic
+pip install "multi-asset-fund[wrds]"   # optional: only for --equity-data-source wrds
+
+export FRED_API_KEY=...         # free: fred.stlouisfed.org (macro series)
+export ANTHROPIC_API_KEY=...    # LLM agents + LLM portfolio manager
+# optional, depending on --equity-data-source:
+export FINANCIAL_DATASETS_API_KEY=...   # for financialdatasets.ai (point-in-time)
+export WRDS_USERNAME=...                # for wrds (password via ~/.pgpass)
 ```
 
-## Headline experiment (planned)
+Run the headline experiment (equal- vs performance-weighted vs benchmark):
 
-Backtest three configurations on 2020–2025:
-equal-weighted agents vs performance-weighted (this repo) vs 60/40 benchmark —
-report Sharpe/Sortino/Calmar/max-DD and per-agent attribution.
+```bash
+python3 -m src.run_backtest --start 2024-01-01 --end 2024-12-31 \
+    --equity-data-source yfinance      # yfinance | financialdatasets | wrds
+```
+
+Useful flags: `--rebalance-freq` (pandas offset, e.g. `W-FRI`, `ME`),
+`--model` (default `claude-haiku-4-5-20251001`), `--pm-mode` (`mechanical` |
+`llm`), `--no-risk-manager`, `--cache-dir`, `--verbose`.
+
+> **Look-ahead note:** `yfinance` has no point-in-time fundamentals, so
+> Buffett/Damodaran signals are computed once from *today's* filings and are
+> look-ahead biased — fine for a smoke test, not for a real headline run. Use
+> `financialdatasets` or `wrds` for point-in-time results.
+
+## Headline experiment
+
+`src.run_backtest` runs a 3-way comparison — equal-weighted agents vs
+performance-weighted (this repo) vs a naive buy-and-hold benchmark — and reports
+Sharpe/Sortino/Calmar/max-DD plus per-agent attribution. A 2020–2025 run is
+captured in `attribution_2020_2025.txt`.

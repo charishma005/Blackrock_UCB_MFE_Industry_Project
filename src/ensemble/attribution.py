@@ -15,7 +15,13 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
-from src.backtest.metrics import hit_rate, information_coefficient, sharpe_ratio
+from src.backtest.metrics import (
+    RISK_FREE_ANNUAL,
+    TRADING_DAYS,
+    hit_rate,
+    information_coefficient,
+    sharpe_ratio,
+)
 
 _DIRECTION = {"bullish": 1.0, "bearish": -1.0, "neutral": 0.0}
 
@@ -49,13 +55,26 @@ class AttributionTracker:
         asset_returns: (date x symbol) daily simple returns.
         Exposure at date t is applied to returns at t+1 (no lookahead).
         Exposures are normalized so gross exposure sums to 1 (or 0 if flat).
+
+        The uninvested sleeve earns the risk-free rate — same fix as
+        engine.py's book-level return series. Without it, an agent sitting in
+        cash earns 0 while sharpe_ratio() downstream still charges the full rf
+        in its excess-return term, so a tactically-flat agent's rolling/full
+        Sharpe is dragged negative by a phantom cash-drag (not by bad calls) —
+        which then feeds the firing/weighting layer. Cash weight is
+        1 - net exposure (short proceeds add to cash, margin-account style),
+        making the paper-return series self-consistent with the rf charged in
+        sharpe_ratio().
         """
         expo = self.exposure_frame(agent).reindex(asset_returns.index).ffill().fillna(0.0)
         gross = expo.abs().sum(axis=1).replace(0.0, np.nan)
         norm = expo.div(gross, axis=0).fillna(0.0)
         # shift(1): today's return earned on yesterday's stance
         common = norm.columns.intersection(asset_returns.columns)
-        return (norm[common].shift(1) * asset_returns[common]).sum(axis=1).fillna(0.0)
+        lagged = norm[common].shift(1)
+        asset_pnl = (lagged * asset_returns[common]).sum(axis=1)
+        cash_pnl = (1.0 - lagged.sum(axis=1)) * (RISK_FREE_ANNUAL / TRADING_DAYS)
+        return (asset_pnl + cash_pnl).fillna(0.0)
 
     def scorecard(self, asset_returns: pd.DataFrame, default_window: int = 60,
                   windows: dict[str, int] | None = None) -> pd.DataFrame:
