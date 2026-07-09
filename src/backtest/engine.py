@@ -38,7 +38,7 @@ import pandas as pd
 from src.agents.aswath_damodaran import AswathDamodaranAgent
 from src.agents.ray_dalio import RayDalioAgent
 from src.agents.warren_buffett import WarrenBuffettAgent
-from src.backtest.metrics import summary, turnover
+from src.backtest.metrics import RISK_FREE_ANNUAL, TRADING_DAYS, summary, turnover
 from src.data.equities import get_equity_facts_bundle as get_equity_facts_pointintime
 from src.data.equities_wrds import get_equity_facts_bundle as get_equity_facts_wrds
 from src.data.equities_yfinance import get_equity_facts_bundle as get_equity_facts_yfinance
@@ -79,6 +79,8 @@ class BacktestResult:
     fired_agents: set[str] = field(default_factory=set)
     static_signals: dict[str, dict[str, dict]] = field(default_factory=dict)   # Buffett/Damodaran, full reasoning
     rebalance_signals: dict[pd.Timestamp, dict[str, dict]] = field(default_factory=dict)  # Dalio per date, full reasoning
+    risk_diag_history: dict[pd.Timestamp, dict] = field(default_factory=dict)   # per-rebalance risk-layer diagnostics
+    pm_reasoning_history: dict[pd.Timestamp, str] = field(default_factory=dict) # per-rebalance PM reasoning text
 
 
 def _blend_target_weights(
@@ -205,7 +207,11 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
             tracker.record(agent, asof, sigs)
 
         rets_so_far = rets.loc[:asof]
-        scorecard = tracker.scorecard(rets_so_far)
+        # Score each agent on its OWN policy window (e.g. Dalio's 120d) rather
+        # than one global 60d window — otherwise a macro agent's longer intended
+        # evaluation horizon is silently ignored and it gets fired on short noise.
+        eval_windows = {a: wm.policy(a).window for a in agents_seen}
+        scorecard = tracker.scorecard(rets_so_far, windows=eval_windows)
         scorecards_history[asof] = scorecard
 
         if config.weighting == "performance":
@@ -240,7 +246,17 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
 
     # Apply weights to NEXT day's return (shift(1) — no lookahead)
     common = weights_df.columns.intersection(rets.columns)
-    port_rets = (weights_df[common].shift(1) * rets[common]).sum(axis=1).fillna(0.0)
+    lagged = weights_df[common].shift(1)
+    asset_pnl = (lagged * rets[common]).sum(axis=1)
+    # Uninvested cash earns the risk-free rate. Without this, a book that runs a
+    # cash sleeve (net exposure < 1) earns 0% on that sleeve while metrics.py
+    # STILL charges the full rf in the Sharpe's excess-return term — a phantom
+    # drag that dominates the ratio at low realized vol. The cash weight is
+    # 1 - net exposure (short proceeds add to cash, matching a margin account),
+    # which makes the return series self-consistent with the rf charged downstream.
+    cash_weight = 1.0 - lagged.sum(axis=1)
+    cash_pnl = cash_weight * (RISK_FREE_ANNUAL / TRADING_DAYS)
+    port_rets = (asset_pnl + cash_pnl).fillna(0.0)
     values = (1 + port_rets).cumprod() * config.initial_cash
 
     return BacktestResult(
@@ -252,6 +268,8 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
         fired_agents=wm.fired,
         static_signals=static_signals,
         rebalance_signals=rebalance_signals_history,
+        risk_diag_history=risk_diag_history,
+        pm_reasoning_history=pm_reasoning_history,
     )
 
 
