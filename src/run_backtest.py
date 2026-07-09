@@ -17,6 +17,14 @@ import os
 
 from src.backtest.engine import BacktestConfig, three_way_comparison, run_backtest
 
+import pandas as pd
+
+# Don't let pandas wrap the metrics table when output is redirected to a file
+# (no terminal width -> it otherwise splits columns into a "\ ...continued" block).
+pd.set_option("display.width", None)
+pd.set_option("display.max_columns", None)
+pd.set_option("display.max_rows", None)
+
 
 def print_diagnostics(cfg: BacktestConfig, llm_client) -> None:
     """Full transparency dump: agent weight evolution, fired agents, and every
@@ -88,6 +96,11 @@ def main():
                           "(needs FINANCIAL_DATASETS_API_KEY, ~$20 one-time credits). "
                           "'wrds' uses Compustat point-in-time via the rdq field (needs a WRDS account "
                           "with Compustat access, e.g. a university subscription) — the most rigorous option.")
+    ap.add_argument("--cache-dir", default=None,
+                     help="Directory for the on-disk LLM response cache. Set it and reruns of the "
+                          "same window/model become free and deterministic (temperature is pinned to 0). "
+                          "The equal- and performance-weighted runs query identical signals, so caching "
+                          "roughly halves the cost of the 3-way comparison. Delete the dir to force a re-query.")
     ap.add_argument("--verbose", action="store_true",
                      help="Print full agent weight evolution, fired agents, and LLM reasoning text "
                           "(single performance-weighted run, not the 3-way comparison table).")
@@ -96,7 +109,7 @@ def main():
     llm_client = None
     if os.environ.get("ANTHROPIC_API_KEY"):
         from src.llm.anthropic_client import AnthropicClient
-        llm_client = AnthropicClient(model=args.model)
+        llm_client = AnthropicClient(model=args.model, cache_dir=args.cache_dir)
     else:
         print("[warn] ANTHROPIC_API_KEY not set — all signals will be neutral/0%, "
               "so this run only validates plumbing, not real results.\n")
