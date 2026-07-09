@@ -57,12 +57,23 @@ class AttributionTracker:
         common = norm.columns.intersection(asset_returns.columns)
         return (norm[common].shift(1) * asset_returns[common]).sum(axis=1).fillna(0.0)
 
-    def scorecard(self, asset_returns: pd.DataFrame, window: int = 60) -> pd.DataFrame:
-        """One row per agent: rolling + full-sample quality stats."""
+    def scorecard(self, asset_returns: pd.DataFrame, default_window: int = 60,
+                  windows: dict[str, int] | None = None) -> pd.DataFrame:
+        """One row per agent: rolling + full-sample quality stats.
+
+        Each agent is scored on its OWN evaluation window (``windows[agent]``,
+        falling back to ``default_window``). Macro/tail agents intentionally get
+        a longer window — their edge shows up episodically, so a short window
+        turns their rolling Sharpe into noise and gets them fired for no reason.
+        The window actually used is reported in ``eval_window``; the rolling
+        stats live in stable ``rolling_sharpe`` / ``rolling_return`` columns (the
+        weighting layer scores on ``rolling_sharpe``)."""
+        windows = windows or {}
         rows = []
         for agent in self._exposures:
+            w = int(windows.get(agent, default_window))
             pr = self.paper_returns(agent, asset_returns)
-            recent = pr.tail(window)
+            recent = pr.tail(w)
             # observations that actually carry information: days the agent held a
             # non-flat position within the window. The weighting layer uses this
             # to avoid firing an agent on a Sharpe computed from a handful of days.
@@ -76,8 +87,9 @@ class AttributionTracker:
             rows.append({
                 "agent": agent,
                 "full_sharpe": sharpe_ratio(pr),
-                f"rolling_{window}d_return": float(recent.sum()),
-                f"rolling_{window}d_sharpe": sharpe_ratio(recent),
+                "eval_window": w,
+                "rolling_return": float(recent.sum()),
+                "rolling_sharpe": sharpe_ratio(recent),
                 "n_obs": n_obs,
                 "hit_rate": hit_rate((expo.shift(1) * asset_returns[expo.columns.intersection(asset_returns.columns)]).sum(axis=1)),
                 "avg_ic": sum(ics) / len(ics) if ics else float("nan"),
