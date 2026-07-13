@@ -1,0 +1,2 @@
+# LLM response cache (large, machine-local)
+.llm_cache/

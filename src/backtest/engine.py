@@ -214,9 +214,18 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
         scorecard = tracker.scorecard(rets_so_far, windows=eval_windows)
         scorecards_history[asof] = scorecard
 
+        # Always update fire/strike state from the scorecard, regardless of
+        # blending mode. wm.update() is the ONLY place strikes accumulate and
+        # agents enter wm.fired, so calling it unconditionally is what lets
+        # equal-weight genuinely "respect hard-fire logic" as documented,
+        # instead of never firing anyone. It's cheap — pure Python over an
+        # already-computed scorecard — and the performance branch is unchanged
+        # (same single call per rebalance, its return value used as before).
+        performance_weights = wm.update(scorecard)
+
         if config.weighting == "performance":
-            agent_weights = wm.update(scorecard)
-        else:  # equal-weight, still respects hard-fire logic for a fair comparison
+            agent_weights = performance_weights
+        else:  # equal-weight among survivors of the SAME firing logic
             active = [a for a in agents_seen if a not in wm.fired]
             agent_weights = {a: 1.0 / len(active) for a in active} if active else {}
 

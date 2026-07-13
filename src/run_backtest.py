@@ -85,6 +85,11 @@ def main():
     ap.add_argument("--model", default="claude-haiku-4-5-20251001")
     ap.add_argument("--no-risk-manager", action="store_true",
                      help="Disable the vol-targeting/correlation risk layer (on by default).")
+    ap.add_argument("--weighting", default="performance", choices=["equal", "performance"],
+                     help="Agent ensemble weighting for the single --verbose run. 'performance' "
+                          "(default) = dynamic weights from rolling attribution; 'equal' = fixed "
+                          "1/N across active agents (turns dynamic weighting OFF). Ignored by the "
+                          "3-way comparison, which always runs both.")
     ap.add_argument("--pm-mode", default="mechanical", choices=["mechanical", "llm"],
                      help="'mechanical' = risk-adjusted blend passes through; "
                           "'llm' = LLM portfolio manager synthesizes final weights (costs extra calls).")
@@ -124,11 +129,13 @@ def main():
 
     cfg = BacktestConfig(
         start=args.start, end=args.end, rebalance_freq=args.rebalance_freq,
+        weighting=args.weighting,
         use_risk_manager=not args.no_risk_manager, pm_mode=args.pm_mode,
         equity_data_source=args.equity_data_source,
     )
     print(f"Running: {args.start} to {args.end}, rebalance={args.rebalance_freq}, "
-          f"model={args.model}, risk_manager={not args.no_risk_manager}, pm_mode={args.pm_mode}, "
+          f"model={args.model}, weighting={args.weighting}, "
+          f"risk_manager={not args.no_risk_manager}, pm_mode={args.pm_mode}, "
           f"equity_data_source={args.equity_data_source}\n")
 
     if args.verbose:

@@ -1,0 +1,14 @@
+/Users/charishmatakkallapalli/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Running: 2024-01-01 to 2024-12-31, rebalance=W-FRI, model=claude-haiku-4-5-20251001, weighting=performance, risk_manager=True, pm_mode=mechanical, equity_data_source=wrds
+
+Loading library list...
+Done
+Loading library list...
+Done
+Loading library list...
+Done
+                                 total_return  annualized_return  annualized_vol  sharpe  sortino  max_drawdown  calmar  avg_daily_turnover
+equal_weighted_agents                 -0.0678            -0.0684          0.0577 -1.9506  -2.8619       -0.0996 -0.6861              0.0062
+performance_weighted_agents            0.0432             0.0436          0.0549  0.0134   0.0217       -0.0420  1.0365              0.0261
+benchmark_equal_weight_buy_hold        0.2416             0.2448          0.1030  1.7564   2.6517       -0.0642  3.8135              0.0000

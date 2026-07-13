@@ -1,0 +1,129 @@
+/Users/charishmatakkallapalli/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Running: 2023-01-01 to 2023-12-31, rebalance=W-FRI, model=claude-haiku-4-5-20251001, weighting=equal, risk_manager=True, pm_mode=mechanical, equity_data_source=wrds
+
+Loading library list...
+Done
+Loading library list...
+Done
+Loading library list...
+Done
+======================================================================
+AGENT WEIGHT EVOLUTION (performance-weighted run)
+======================================================================
+            ray_dalio  warren_buffett  aswath_damodaran
+2023-01-06      0.333           0.333             0.333
+2023-01-13      0.333           0.333             0.333
+2023-01-20      0.333           0.333             0.333
+2023-01-27      0.333           0.333             0.333
+2023-02-03      0.333           0.333             0.333
+2023-02-10      0.333           0.333             0.333
+2023-02-17      0.333           0.333             0.333
+2023-02-24      0.333           0.333             0.333
+2023-03-03      0.333           0.333             0.333
+2023-03-10      0.333           0.333             0.333
+2023-03-17      0.333           0.333             0.333
+2023-03-24      0.333           0.333             0.333
+2023-03-31      0.333           0.333             0.333
+2023-04-06      0.333           0.333             0.333
+2023-04-14      0.333           0.333             0.333
+2023-04-21      0.333           0.333             0.333
+2023-04-28      0.333           0.333             0.333
+2023-05-05      0.333           0.333             0.333
+2023-05-12      0.333           0.333             0.333
+2023-05-19      0.333           0.333             0.333
+2023-05-26      0.333           0.333             0.333
+2023-06-02      0.333           0.333             0.333
+2023-06-09      0.333           0.333             0.333
+2023-06-16      0.333           0.333             0.333
+2023-06-23      0.333           0.333             0.333
+2023-06-30      0.333           0.333             0.333
+2023-07-07      0.333           0.333             0.333
+2023-07-14      0.333           0.333             0.333
+2023-07-21      0.333           0.333             0.333
+2023-07-28      0.333           0.333             0.333
+2023-08-04      0.333           0.333             0.333
+2023-08-11      0.333           0.333             0.333
+2023-08-18      0.333           0.333             0.333
+2023-08-25      0.333           0.333             0.333
+2023-09-01      0.333           0.333             0.333
+2023-09-08      0.333           0.333             0.333
+2023-09-15      0.333           0.333             0.333
+2023-09-22      0.333           0.333             0.333
+2023-09-29      0.333           0.333             0.333
+2023-10-06      0.333           0.333             0.333
+2023-10-13      0.333           0.333             0.333
+2023-10-20      0.333           0.333             0.333
+2023-10-27      0.333           0.333             0.333
+2023-11-03      0.333           0.333             0.333
+2023-11-10      0.333           0.333             0.333
+2023-11-17      0.333           0.333             0.333
+2023-11-24      0.333           0.333             0.333
+2023-12-01      0.333           0.333             0.333
+2023-12-08      0.333           0.333             0.333
+2023-12-15      0.333           0.333             0.333
+2023-12-22      0.333           0.333             0.333
+2023-12-29      0.333           0.333             0.333
+
+Fired agents: none
+
+======================================================================
+STATIC EQUITY SIGNALS — Buffett & Damodaran (computed ONCE from today's fundamentals — LOOK-AHEAD BIASED, see engine docstring)
+======================================================================
+
+--- (single computation): 2023-01-06 ---
+  [warren_buffett]
+    AAPL: NEUTRAL (65%)
+      reasoning: Apple's owner-earnings yield (4.55%) falls short of a 7% hurdle rate—no margin of safety. While ROE averages 26.3%, the coefficient of variation of 1.37 signals inconsistent returns, undermining moat durability. High debt-to-equity (2.61) and zero moat_index raise concerns. Rational buybacks are positive, but the business—though wonderful—is priced without adequate margin. Wait for a better entry.
+    MSFT: NEUTRAL (72%)
+      reasoning: MSFT owns a durable moat (29.5% ROE, 0.68 index) and executes rational capital allocation via buybacks. However, owner-earnings yield of 3.42% falls well short of the 7% hurdle rate—no margin of safety at current valuation. A wonderful business, but priced for perfection. Wait for a better entry point.
+    NVDA: NEUTRAL (72%)
+      reasoning: NVDA's owner-earnings yield (1.74%) falls well short of a 7% hurdle rate—no margin of safety. While the moat index (0.34) suggests some competitive advantage, the 66% coefficient of variation in ROE signals inconsistent profitability, undermining moat durability. Rational capital allocation (buybacks, no dividend) is positive, but the valuation demands perfection. Stay on the sidelines until price corrects or moat strengthens.
+  [aswath_damodaran]
+    AAPL: BEARISH (72%)
+      reasoning: AAPL trades at $150 (implied by $2.2T market cap ÷ shares), 25% above intrinsic value of $120. The narrative—3% perpetual growth on 4.3% historical CAGR—is conservative, but reinvestment efficiency is opaque (ROIC spread missing). Margin of safety is negative (-13%), violating discipline. Relative valuation in line with history offers no margin. At this price, risk/reward is unfavorable absent a compelling efficiency story.
+    MSFT: BEARISH (72%)
+      reasoning: MSFT trades at $232/share against intrinsic value of $145.80—a 59% premium with negative margin of safety (-37.4%). Growth assumption (3%) lags historical revenue CAGR (4.68%), yet price reflects optimism. Beta of 1.0 and 9% cost of equity are reasonable, but valuation lacks reinvestment efficiency data to justify premium. Relative valuation in line with history offers no cushion. Discipline demands waiting for a meaningful discount to intrinsic value.
+    NVDA: BEARISH (72%)
+      reasoning: NVDA trades at $133/share against intrinsic value of $33.59—a 75% overvaluation with negative margin of safety. The narrative (3% perpetual growth) is inconsistent with historical 5% revenue CAGR and AI tailwinds, yet the story demands extraordinary reinvestment efficiency to justify current price. Cost of equity (9%) is reasonable given beta=1.0, but missing ROIC data obscures whether growth actually creates value. Relative valuation alignment offers no comfort when the absolute level is detached from fundamentals. Discipline demands waiting for a meaningful price correction.
+
+======================================================================
+RAY DALIO SIGNALS — first and last rebalance date (macro evolves over time)
+======================================================================
+
+--- FIRST rebalance: 2023-01-06 ---
+  TLT: BULLISH (72%)
+    reasoning: Falling inflation with expanding growth defines goldilocks—ideal for long-duration treasuries. Inverted curve signals eventual rate cuts; TLT captures duration upside as Fed pivots. However, 3.5% unemployment suggests labor market resilience may delay cuts. Position TLT as core diversifier, not concentrated bet. Monitor if growth stalls or credit spreads widen—either triggers faster rally.
+  IEF: BULLISH (72%)
+    reasoning: Falling inflation in expanding growth regime favors duration. Inverted curve signals eventual rate cuts; 7-10yr Treasuries positioned to capture capital appreciation as long rates compress. However, curve inversion with strong 3.5% unemployment creates uncertainty—Fed may hold longer than expected. Risk parity positioning warrants modest overweight, not concentration.
+  LQD: BULLISH (72%)
+    reasoning: Goldilocks regime (growth expanding, inflation falling) is ideal for IG credit. Inverted curve typically precedes rate cuts, supporting duration. However, the -69bp inversion is mild and unemployment remains tight at 3.5%, limiting immediate recession risk. LQD benefits from falling inflation without growth collapse. Risk: curve normalization could compress spreads. Position sizing appropriate given regime clarity.
+  HYG: NEUTRAL (62%)
+    reasoning: Goldilocks regime (growth expanding, inflation falling) typically favors risk assets, but inverted curve signals recession risk ahead. HYG faces headwinds: curve inversion historically precedes credit stress; falling inflation is positive, but unemployment at 3.5% leaves little buffer. The machine suggests transition risk. Position defensively; monitor credit spreads and central bank pivot timing before adding duration risk in high yield.
+  GLD: NEUTRAL (62%)
+    reasoning: Goldilocks regime (growth expanding, inflation falling) typically favors risk assets over gold. However, inverted yield curve signals recession risk ahead, which supports gold as a hedge. Gold's dual nature creates tension: falling inflation reduces real yield support, but curve inversion and potential deleveraging ahead warrant defensive positioning. Hold gold as portfolio insurance rather than conviction bet.
+  USO: NEUTRAL (55%)
+    reasoning: Goldilocks regime (growth expanding, inflation falling) typically favors risk assets, but inverted curve signals recession risk ahead. Oil faces headwinds: demand destruction in slowdown, but falling inflation reduces stagflation premium. USO benefits from growth expansion now, but curve inversion suggests regime shift imminent. Position defensively; avoid concentration. Monitor credit spreads and central bank pivot timing—that determines oil's next leg.
+  CPER: BULLISH (72%)
+    reasoning: Goldilocks regime (growth expanding, inflation falling) typically favors risk assets. Copper benefits from growth expansion and moderating inflation reduces real rate headwinds. Inverted curve is a caution, but the machine is in a sweet spot. Copper's cyclical sensitivity to growth outweighs deflation concerns here. Position sizing should reflect curve inversion risk, but the regime bias is constructive.
+
+--- LAST rebalance: 2023-12-29 ---
+  TLT: BULLISH (78%)
+    reasoning: Deflationary slowdown regime (growth- inflation-) is textbook TLT environment. Inverted curve + credit stress signal flight-to-quality into long duration. Falling inflation validates nominal bond positioning. Recent 14.87% return reflects this regime shift. Risk: if central bank pivots hawkish or growth stabilizes unexpectedly, duration becomes liability.
+  IEF: BULLISH (78%)
+    reasoning: Deflationary slowdown regime (growth- inflation-) is textbook long-duration treasury environment. Inverted curve + credit stress + falling inflation = flight to quality. IEF's 3m outperformance (+7.28%) confirms the machine is repricing duration favorably. Position size appropriately within diversified portfolio given vol (9.9%) and macro tail risks.
+  LQD: BEARISH (72%)
+    reasoning: Deflationary slowdown regime with inverted curve and widening credit stress is the classic pre-recession machine state. LQD faces duration headwinds as growth slows; credit spreads will likely widen further. Fallen inflation favors long-duration Treasuries over corporates. Recent 3m rally likely reflects flight-to-quality, not fundamental improvement. Reduce exposure; rebalance into duration.
+  HYG: BEARISH (78%)
+    reasoning: Deflationary slowdown regime with inverted curve and rising credit stress is the worst environment for high-yield. The machine is in contraction mode: growth slowing, inflation falling, unemployment rising. Inverted curve + credit stress signals deleveraging ahead. HYG's recent 7.76% return likely reflects mean reversion; structural headwinds dominate. Shift to duration assets instead.
+  GLD: BULLISH (78%)
+    reasoning: Deflationary slowdown regime (growth- inflation-) is textbook gold environment. Inverted curve + credit stress signal flight to safety and potential deleveraging. Falling inflation favors real assets; gold's 12.7% 3m rally reflects this positioning. However, 3.8% unemployment suggests labor market resilience may limit downside severity. Gold is appropriate hedge within diversified portfolio, not concentrated bet.
+  USO: BEARISH (72%)
+    reasoning: Deflationary slowdown regime (growth- inflation-) is structurally negative for crude. Inverted curve + credit stress signal demand destruction ahead. Oil's -16% 3m return reflects this correctly. Falling inflation reduces inflation-hedge appeal. Gold's strength confirms risk-off positioning. Hold underweight; crude lacks regime tailwind.
+  CPER: BEARISH (72%)
+    reasoning: We're in deflationary slowdown (growth- inflation-): the regime that typically crushes industrial commodities. Inverted curve + credit stress signals contraction ahead. Copper's 3m bounce (+7.15%) is a sucker's rally into weakening demand. Gold outperforming (+12.68%) confirms flight-to-safety. Reduce copper exposure; rebalance toward duration and real assets.
+
+======================================================================
+FINAL METRICS
+======================================================================
+{'total_return': -0.11885800776742717, 'annualized_return': -0.12020031706389145, 'annualized_vol': 0.06018428783073727, 'sharpe': -2.8182708891032324, 'sortino': -3.188224833940853, 'max_drawdown': -0.1381671035537776, 'calmar': -0.8699633557643981, 'avg_daily_turnover': 0.00663016699780512}
