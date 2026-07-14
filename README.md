@@ -72,6 +72,37 @@ transmission-map persona), `fund.py` (netting/allocation), `meeting.py` (the
 meeting as a run loop), `scoring.py` (research attribution), `backtest.py` (weekly
 loop), `synthetic.py` (offline data).
 
+### Phase-1 diagnostics (`src/layered/diagnostics.py`)
+
+Before trusting the analyst layer, four things get measured — each for the
+**deterministic Phase-1** agents and the **LLM Phase-2** agents *side by side*,
+so you can see what the LLM adds (skill? correlation? a future leak?):
+
+1. **Faithfulness** — is the inflation agent really about inflation? *Input
+   isolation* is structural (an access-logging probe confirms each analyst reads
+   only its declared series, nothing past `asof`); *responsiveness vs
+   contamination* correlates each agent's view against every driver's honest
+   measurement (own high, cross low = faithful); a lexicon proxy checks the
+   reasoning stays on-topic.
+2. **Correctness** — horizon-aware hit rate + information score vs a persistence
+   baseline and a coin flip (`edge_vs_persistence`, `edge_vs_random`).
+3. **Lookahead** — the data-slice leak is caught by the isolation probe + the
+   `AsOf` unit test; the subtle **LLM training-cutoff** leak is caught by a
+   *prescience* test: information gain of the LLM over the no-future-info
+   deterministic baseline, plus accuracy on dates where the LLM *overrode* it.
+   Only meaningful on `--source fred` (synthetic series have no real future to
+   memorize — the report says so).
+4. **Correlation** — pairwise correlation of the analysts' signed-conviction
+   streams; low off-diagonal = the independence the thesis is buying.
+
+```bash
+python3 -m src.run_diagnostics                        # synthetic, deterministic column
+ANTHROPIC_API_KEY=... python3 -m src.run_diagnostics  # adds the LLM column
+ANTHROPIC_API_KEY=... FRED_API_KEY=... python3 -m src.run_diagnostics \
+    --source fred --start 2019-01-01 --end 2024-12-31 --out reports/phase1.md
+python3 test_diagnostics.py                            # offline (stub LLM), no keys
+```
+
 ## Status / roadmap
 
 Flat ensemble (prior step):
@@ -97,6 +128,8 @@ Layered agent fund (next step):
 - [x] Unifying layer: net exposures, allocate by conviction / risk / diversification
 - [x] Research scoring: grade analysts on being right, separately from P&L
 - [x] Weekly meeting loop + offline synthetic data + smoke test
+- [x] Phase-1 diagnostics: faithfulness, correctness vs baseline, lookahead +
+      LLM prescience, cross-agent correlation (deterministic vs LLM, side by side)
 - [ ] Second strategy (equity long/short or credit basis) to activate cross-strategy diversification
 - [ ] Multi-analyst-per-driver (preserve/consume disagreement as a first-class signal)
 - [ ] Wire LLM Phase-2 refinement on a real FRED/yfinance run
