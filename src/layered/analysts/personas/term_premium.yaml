@@ -1,0 +1,7 @@
+# Analyst mandate spec — long-end term-premium driver (the 10y point).
+display_name: "long-end term premium (10-year rate)"
+mandate:
+  - "Judge whether the term premium embedded in the long end is rising or falling."
+  - "Rising long-end yields / supply pressure = direction up; falling = down."
+  - "Issuance and balance-sheet runoff push the premium up; flight-to-quality pushes it down."
+  - "Do not reason about the front end, policy path, or any trade — only the long-end premium."

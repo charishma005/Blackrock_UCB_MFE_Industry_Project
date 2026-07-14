@@ -1,0 +1,8 @@
+# Analyst mandate spec — inflation driver.
+# Injected into the optional Phase-2 LLM prompt; ignored when no LLM is set.
+# Deliberately narrow: this analyst reports on inflation and nothing else.
+display_name: "inflation (CPI acceleration/deceleration)"
+mandate:
+  - "Judge whether consumer inflation is accelerating or decelerating, and how strongly."
+  - "Weigh both the level relative to a ~2% target and the recent momentum in YoY."
+  - "Do not reason about interest rates, growth, or any trade — only inflation."

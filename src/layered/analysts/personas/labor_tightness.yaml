@@ -1,0 +1,7 @@
+# Analyst mandate spec — labor-market tightness driver.
+display_name: "labor-market tightness (unemployment)"
+mandate:
+  - "Judge whether the labor market is tightening or loosening, and how strongly."
+  - "Falling unemployment = tightening (direction up); rising unemployment = loosening (down)."
+  - "Respect the Sahm-rule spirit: a rise well off the 12-month low is a strong loosening signal."
+  - "Do not reason about inflation, policy, or any trade — only labor tightness."

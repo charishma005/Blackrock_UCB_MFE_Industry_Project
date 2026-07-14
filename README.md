@@ -27,8 +27,54 @@ dynamic agent weighting ("firing"), and persona conditioning from primary source
    interview transcripts. Specs, not raw transcripts, are committed.
    (`src/agents/personas/`, `src/agents/base.py`)
 
+## Next step: the layered agent fund (`src/layered/`)
+
+The flat ensemble above blends whole-investor *opinions*. The next step, set out
+in the project's **"A Layered Agent Fund"** thesis, reorganizes the fund around
+the weekly **analyst–PM meeting** and separates three things a monolithic system
+blurs together: **belief formation**, **action selection**, and **survival**.
+
+```
+  analyst layer            PM layer                      unifying layer
+  (isolated single-        (arbitrate the views +        (net exposures across
+   driver experts)          express ONE relative-         strategies, allocate
+        │                   value trade per strategy)     capital, feed back down)
+   DriverView  ───────►   StrategyTrade   ───────►    FundAllocation ──┐
+        ▲                                                              │
+        └──────────────  capital + constraints flow back down  ◄───────┘
+```
+
+The three layers talk only through **stable contracts** (`src/layered/contracts.py`)
+— `DriverView`, `StrategyTrade`, `FundAllocation` — so any layer's method can be
+swapped without touching the others. The thesis commits to no forecasting
+technique; these are the interfaces, plus one **worked end-to-end instance**: a
+macro-rates PM fed by four single-driver analysts (inflation, labor, Fed balance
+sheet, term premium) that expresses their joint view as a **DV01-neutral 2s10s
+flattener** — the exact example from the thesis.
+
+Because research quality and arbitrage quality are attributed *separately*
+(`src/layered/scoring.py` grades analysts on whether their driver calls were
+right; metrics grade the book on P&L), the fund can ask *which* layer failed.
+
+Runs offline with no keys (`--source synthetic`) and with real data
+(`--source fred`); the LLM is an optional Phase-2 refinement of each analyst.
+
+```bash
+python3 test_layered.py                 # offline smoke test (no keys, no network)
+python3 -m src.run_layered              # synthetic hawkish regime → a flattener
+python3 -m src.run_layered --regime dovish          # mirror image → a steepener
+python3 -m src.run_layered --source fred --start 2022-01-01 --end 2024-12-31
+```
+
+Layered layout: `contracts.py` (interfaces), `timeline.py` (no-lookahead gate),
+`analysts/` (isolated experts + mandate specs), `pm/` (arbitrate/express +
+transmission-map persona), `fund.py` (netting/allocation), `meeting.py` (the
+meeting as a run loop), `scoring.py` (research attribution), `backtest.py` (weekly
+loop), `synthetic.py` (offline data).
+
 ## Status / roadmap
 
+Flat ensemble (prior step):
 - [x] Instruments + data layer (yfinance, FRED)
 - [x] Metrics module
 - [x] Attribution tracker + weight manager
@@ -41,6 +87,19 @@ dynamic agent weighting ("firing"), and persona conditioning from primary source
 - [ ] Persona distillation script (transcripts -> YAML)
 - [ ] Fixed-income agent (Gundlach-style: duration, curve, credit)
 - [ ] Commodities agent (COT positioning + trend)
+
+Layered agent fund (next step):
+- [x] Layer contracts: `DriverView` / `StrategyTrade` / `FundAllocation`
+- [x] Time-integrity gate (`AsOf`) — no agent sees data it could not have had
+- [x] Analyst layer: single-driver base + inflation / labor / balance-sheet / term-premium
+- [x] PM layer: arbitrate + express, with a driver→instrument transmission map
+- [x] Worked instance: macro-rates PM → DV01-neutral 2s10s flattener
+- [x] Unifying layer: net exposures, allocate by conviction / risk / diversification
+- [x] Research scoring: grade analysts on being right, separately from P&L
+- [x] Weekly meeting loop + offline synthetic data + smoke test
+- [ ] Second strategy (equity long/short or credit basis) to activate cross-strategy diversification
+- [ ] Multi-analyst-per-driver (preserve/consume disagreement as a first-class signal)
+- [ ] Wire LLM Phase-2 refinement on a real FRED/yfinance run
 
 ## Setup
 

@@ -1,0 +1,7 @@
+# Analyst mandate spec — Fed balance-sheet driver.
+display_name: "the Fed's balance sheet (WALCL)"
+mandate:
+  - "Judge whether the Fed's balance sheet is expanding (QE) or in runoff (QT), and the pace."
+  - "Expanding = direction up; runoff/QT = direction down."
+  - "Draining reserves tightens financial conditions and pressures term premium at the long end."
+  - "Do not reason about inflation, employment, or any trade — only the balance sheet."
