@@ -76,7 +76,11 @@ def render(r: DiagnosticsReport) -> str:
              "the LLM column is where drift shows up.",
     )
     L += _pair("Reasoning stays on-topic (lexicon proxy)", r.reasoning_det, r.reasoning_llm,
-               note="on_topic_rate high, contamination_rate low ⇒ the text stays about the driver.")
+               note="on_topic_rate high, contamination_rate low ⇒ the text stays about the driver. "
+                    "CAVEAT: high contamination on balance_sheet / term_premium is largely a lexicon "
+                    "artifact — their mandates describe the transmission (e.g. 'runoff → term premium'), "
+                    "so the text legitimately name-drops the other end. Cross-check against §4 (correlation): "
+                    "if view correlation did NOT rise, it is not genuine contamination.")
 
     L.append("## 2. Correctness")
     L += _pair(
@@ -95,6 +99,11 @@ def render(r: DiagnosticsReport) -> str:
         L += ["_Prescience: n/a — needs the LLM column._", ""]
     else:
         L += ["```", r.prescience.to_string(), "```", ""]
+        L += ["_`verdict` is computed per driver (not a fixed template): a leak only shows as the LLM "
+              "beating the no-future-info baseline, so `information_gain ≤ 0` ⇒ no leak signal. The test "
+              "only bites when the window spans the model's training cutoff — a pre-cutoff-only window "
+              "(e.g. 2019–2024 for a 2025-cutoff model) has no post-cutoff control and is inconclusive by "
+              "construction. `override_hit` is noise when `override_n` is small (< 10)._", ""]
 
     L.append("## 4. Correlation between agents")
     L.append("")

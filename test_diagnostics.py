@@ -71,8 +71,8 @@ check("Prescience table populated with LLM", not r2.prescience.empty and "inform
 check("Prescience captured term_premium overrides (stub forces 'up')",
       int(r2.prescience.loc["term_premium", "override_n"]) > 0,
       r2.prescience.loc["term_premium", "override_n"])
-check("Prescience marks synthetic as non-leakable",
-      "fabricated" in r2.prescience.loc["inflation", "interpretation"])
+check("Prescience verdict marks synthetic as non-testable",
+      "synthetic" in r2.prescience.loc["inflation", "verdict"])
 
 # ── summary ──────────────────────────────────────────────────────────────
 print(f"\n{len(PASS)} passed, {len(FAIL)} failed")

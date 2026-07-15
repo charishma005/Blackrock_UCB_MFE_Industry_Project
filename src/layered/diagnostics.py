@@ -267,6 +267,28 @@ def correctness(agent: AnalystRun, truth_level: pd.DataFrame, horizon_days: int 
 
 
 # ── 3. lookahead: LLM training-cutoff prescience ────────────────────────────
+_LEAK_MIN_OVERRIDES = 10   # below this, override_hit is noise, not evidence
+_GAIN_NOISE_BAND = 0.02    # |information_gain| within this ≈ no real difference
+
+
+def _leak_verdict(gain: float, ov_n: int, ov_hit: float, source: str) -> str:
+    """A computed verdict per driver — replaces the old fixed template that
+    printed 'possible leak' on every row regardless of the numbers.
+
+    A training-cutoff leak reveals itself as the LLM being *more accurate* than
+    the no-future-info baseline. No gain ⇒ nothing to attribute to leakage.
+    Even a real gain is only suggestive without a post-cutoff control slice."""
+    if source != "fred":
+        return "synthetic — leak not testable (no real future to memorize)"
+    if gain != gain:                                    # NaN
+        return "n/a"
+    if gain <= _GAIN_NOISE_BAND:
+        return "no gain → no leak signal"
+    if ov_n >= _LEAK_MIN_OVERRIDES and ov_hit == ov_hit and ov_hit >= 0.6:
+        return "gain + accurate overrides → possible leak; verify on a post-cutoff window"
+    return "small gain, unconfirmed → needs a post-cutoff control window"
+
+
 def prescience(
     det: pd.DataFrame,
     llm: pd.DataFrame | None,
@@ -286,15 +308,12 @@ def prescience(
     deterministic call — implausibly high override accuracy is the sharpest tell.
 
     On synthetic data the series are fabricated, so the LLM cannot have memorized
-    their future; ``interpretation`` says so. This is only a real leak test on
-    ``--source fred``.
+    their future; the ``verdict`` column says so. This is only a real leak test on
+    ``--source fred`` — and only bites when the window spans the model's cutoff.
     """
-    interp = ("fabricated series — LLM cannot leak a made-up future; run on --source fred"
-              if source != "fred" else
-              "REAL history — large positive gain / high override_hit ⇒ possible training-cutoff leak")
     if llm is None or llm_run is None:
         return pd.DataFrame(columns=["driver", "det_hit", "llm_hit", "information_gain",
-                                     "override_n", "override_hit", "interpretation"]).set_index("driver")
+                                     "override_n", "override_hit", "verdict"]).set_index("driver")
     eps = 1e-9
     rows = []
     for d in det.index:
@@ -314,14 +333,16 @@ def prescience(
             call = {"up": 1.0, "down": -1.0, "flat": 0.0}[ld[t]]
             ov_n += 1
             ov_hit += int(call == np.sign(realized) and call != 0.0)
+        gain = round(llm_hit - det_hit, 3) if (llm_hit == llm_hit and det_hit == det_hit) else float("nan")
+        ov_hit_frac = round(ov_hit / ov_n, 3) if ov_n else float("nan")
         rows.append({
             "driver": d,
             "det_hit": det_hit,
             "llm_hit": llm_hit,
-            "information_gain": round(llm_hit - det_hit, 3) if (llm_hit == llm_hit and det_hit == det_hit) else float("nan"),
+            "information_gain": gain,
             "override_n": ov_n,
-            "override_hit": round(ov_hit / ov_n, 3) if ov_n else float("nan"),
-            "interpretation": interp,
+            "override_hit": ov_hit_frac,
+            "verdict": _leak_verdict(gain, ov_n, ov_hit_frac, source),
         })
     return pd.DataFrame(rows).set_index("driver")
 
