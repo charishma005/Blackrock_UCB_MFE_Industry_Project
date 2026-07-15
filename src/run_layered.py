@@ -97,6 +97,12 @@ def main():
     if os.environ.get("ANTHROPIC_API_KEY"):
         from src.llm.anthropic_client import AnthropicClient
         llm_client = AnthropicClient(model=args.model)
+        try:
+            llm_client.validate()  # fail fast on a bad key/model
+        except Exception as e:  # noqa: BLE001
+            print(f"[error] LLM preflight failed — check ANTHROPIC_API_KEY and --model.\n"
+                  f"        {type(e).__name__}: {e}")
+            raise SystemExit(1)
     else:
         print("[warn] ANTHROPIC_API_KEY not set — analysts use deterministic Phase-1 "
               "readings only (no LLM refinement). Fully runnable; just not LLM-driven.\n")

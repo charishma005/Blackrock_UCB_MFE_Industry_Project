@@ -23,6 +23,17 @@ import time
 
 import anthropic
 
+# Errors that will NEVER succeed on retry — a bad key, a wrong model id, or a
+# malformed request. Retrying these just sleeps through `max_retries` on every
+# one of hundreds of calls (that is what made an invalid-key run crawl), so we
+# re-raise immediately instead.
+_NON_RETRYABLE = (
+    anthropic.AuthenticationError,    # 401 — invalid/missing API key
+    anthropic.PermissionDeniedError,  # 403 — key lacks access
+    anthropic.BadRequestError,        # 400 — bad params
+    anthropic.NotFoundError,          # 404 — wrong model id
+)
+
 
 class AnthropicClient:
     def __init__(
@@ -62,11 +73,23 @@ class AnthropicClient:
                     block.text for block in resp.content if getattr(block, "type", None) == "text"
                 )
                 return _extract_json(text)
-            except Exception as e:  # noqa: BLE001 — deliberately broad, this is a retry boundary
+            except _NON_RETRYABLE:
+                raise  # fail fast — retrying a bad key / model / request never helps
+            except Exception as e:  # noqa: BLE001 — transient (429 / 5xx / network / parse): retry
                 last_err = e
                 if attempt < self.max_retries:
                     time.sleep(self.retry_backoff_seconds * attempt)
         raise RuntimeError(f"LLM call failed after {self.max_retries} attempts: {last_err}")
+
+    def validate(self) -> None:
+        """Cheap preflight — one 1-token call to confirm the key and model work
+        before a long run. Raises the underlying anthropic error on failure so
+        the CLI can stop immediately instead of failing on every call."""
+        self._client.messages.create(
+            model=self.model,
+            max_tokens=1,
+            messages=[{"role": "user", "content": "ping"}],
+        )
 
 
 def _extract_json(text: str) -> str:
