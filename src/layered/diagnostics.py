@@ -282,6 +282,42 @@ def correctness(agent: AnalystRun, truth_level: pd.DataFrame, horizon_days: int 
     return pd.DataFrame(rows).set_index("driver")
 
 
+# ── 2b. signal Sharpe: risk-adjusted quality of the signed conviction ───────
+def signal_sharpe(run: AnalystRun, periods_per_year: int = 52) -> pd.DataFrame:
+    """Per-driver *signal* Sharpe — NOT a tradable P&L.
+
+    Treats each analyst's signed conviction as a paper position on its own
+    driver's next-period level move: ``pnl_t = signed_conviction_t *
+    (level_{t+1} - level_t)``. The Sharpe of that stream rewards being right AND
+    sized right (small when unsure), and penalizes noisy sizing — things hit-rate
+    ignores. It is a signal-quality metric on the driver's *level* (no instrument
+    return), so it is not bookable. Scale-invariant in the level units (the units
+    cancel in mean/std), so no standardization is needed.
+
+    Mirrors ``src/backtest/metrics.sharpe_ratio`` but annualizes at the meeting
+    cadence (√``periods_per_year``, weekly by default) and applies no risk-free
+    drag — that helper is daily-hardcoded and assumes a real return, so it is not
+    reused here.
+    """
+    rows = []
+    for d in run.signed.columns:
+        pos = run.signed[d]
+        fwd = run.level[d].diff().shift(-1)           # next-meeting change in the driver's level
+        pnl = (pos * fwd).dropna()
+        sd = float(pnl.std())
+        mean = float(pnl.mean()) if len(pnl) else float("nan")
+        sharpe = (float(np.sqrt(periods_per_year) * mean / sd)
+                  if len(pnl) >= 2 and sd > 0 else float("nan"))
+        rows.append({
+            "driver": d,
+            "n": int(len(pnl)),
+            "mean_pnl": round(mean, 5) if mean == mean else float("nan"),
+            "vol": round(sd, 5) if sd == sd else float("nan"),
+            "sharpe": round(sharpe, 3) if sharpe == sharpe else float("nan"),
+        })
+    return pd.DataFrame(rows).set_index("driver")
+
+
 # ── 3. lookahead: LLM training-cutoff prescience ────────────────────────────
 _LEAK_MIN_OVERRIDES = 10   # below this, override_hit is noise, not evidence
 _GAIN_NOISE_BAND = 0.02    # |information_gain| within this ≈ no real difference
@@ -397,6 +433,11 @@ class DiagnosticsReport:
     corr_llm: pd.DataFrame | None
     avg_offdiag_det: float
     avg_offdiag_llm: float
+    horizons: list[int] = field(default_factory=list)
+    correctness_by_horizon_det: dict[int, pd.DataFrame] = field(default_factory=dict)
+    correctness_by_horizon_llm: dict[int, pd.DataFrame] | None = None
+    signal_sharpe_det: pd.DataFrame | None = None
+    signal_sharpe_llm: pd.DataFrame | None = None
     meta: dict = field(default_factory=dict)
 
 
@@ -412,6 +453,7 @@ def run_diagnostics(
     source: str = "synthetic",
     regime: str | None = None,
     progress=None,
+    horizons: list[int] | None = None,
 ) -> DiagnosticsReport:
     """Run all four diagnostics for the deterministic agents and (if a client is
     given) the LLM agents, on the same schedule and data.
@@ -440,6 +482,13 @@ def run_diagnostics(
     cmat_det, off_det = agent_correlation(det_run)
     cmat_llm, off_llm = agent_correlation(llm_run) if llm_run else (None, float("nan"))
 
+    # Multi-horizon directional grading + per-driver signal Sharpe (both free).
+    hset = horizons or [21, 63, 126]
+    corr_by_h_det = {h: correctness(det_run, truth_level, h) for h in hset}
+    corr_by_h_llm = ({h: correctness(llm_run, truth_level, h) for h in hset} if llm_run else None)
+    sharpe_det = signal_sharpe(det_run)
+    sharpe_llm = signal_sharpe(llm_run) if llm_run else None
+
     return DiagnosticsReport(
         source=source, regime=regime, horizon_days=horizon_days, dates=dates, has_llm=llm_run is not None,
         input_isolation=iso,
@@ -449,5 +498,8 @@ def run_diagnostics(
         prescience=presc,
         corr_det=cmat_det, corr_llm=cmat_llm,
         avg_offdiag_det=off_det, avg_offdiag_llm=off_llm,
+        horizons=list(hset),
+        correctness_by_horizon_det=corr_by_h_det, correctness_by_horizon_llm=corr_by_h_llm,
+        signal_sharpe_det=sharpe_det, signal_sharpe_llm=sharpe_llm,
         meta={"n_dates": len(dates)},
     )

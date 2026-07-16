@@ -93,6 +93,14 @@ def render(r: DiagnosticsReport) -> str:
         note="edge_vs_persistence > 0 means the analyst beats 'the last move continues'; "
              "edge_vs_random > 0 means it beats a coin flip.",
     )
+    if r.correctness_by_horizon_det:
+        L += ["### edge_vs_random by horizon", "",
+              "_Same call, graded at several horizons — reveals where each agent's signal lives._", ""]
+        piv = pd.DataFrame({f"{h}d": r.correctness_by_horizon_det[h]["edge_vs_random"] for h in r.horizons})
+        L += ["**Deterministic**", "", "```", piv.to_string(), "```", ""]
+        if r.correctness_by_horizon_llm:
+            pivl = pd.DataFrame({f"{h}d": r.correctness_by_horizon_llm[h]["edge_vs_random"] for h in r.horizons})
+            L += ["**LLM Phase-2**", "", "```", pivl.to_string(), "```", ""]
 
     L.append("## 3. Lookahead")
     L.append("")
@@ -118,6 +126,16 @@ def render(r: DiagnosticsReport) -> str:
     L += ["**Deterministic**", "", "```", r.corr_det.to_string(), "```", ""]
     if r.corr_llm is not None:
         L += ["**LLM**", "", "```", r.corr_llm.to_string(), "```", ""]
+
+    if r.signal_sharpe_det is not None:
+        L.append("## 5. Signal Sharpe")
+        L += _pair(
+            "Risk-adjusted quality of the signed conviction (NOT tradable)",
+            r.signal_sharpe_det, r.signal_sharpe_llm,
+            note="paper position = signed conviction on the driver's own next-period level move; "
+                 "sharpe = sqrt(52) · mean/std. Conviction/sizing-weighted, so it rewards being right AND "
+                 "sized right — a signal-quality metric, not a bookable P&L.",
+        )
     return "\n".join(L)
 
 
@@ -128,7 +146,10 @@ def main():
     ap.add_argument("--start", default="2022-01-01")
     ap.add_argument("--end", default="2024-12-31")
     ap.add_argument("--freq", default="W-FRI")
-    ap.add_argument("--horizon-days", type=int, default=63)
+    ap.add_argument("--horizon-days", type=int, default=63,
+                    help="primary horizon for the §2 correctness table")
+    ap.add_argument("--horizons", default="21,63,126",
+                    help="comma-separated horizons (days) for the multi-horizon edge table")
     ap.add_argument("--model", default="claude-haiku-4-5-20251001")
     ap.add_argument("--out", default=None, help="optional path to save the report as markdown")
     # The experiment's only knob. Everything else — analysts, dates, scoring — is
@@ -188,6 +209,7 @@ def main():
         horizon_days=args.horizon_days, llm_client=llm_client,
         source=args.source, regime=regime,
         progress=_progress,
+        horizons=[int(h) for h in args.horizons.split(",") if h.strip()],
     )
     text = render(report)
     print(text)

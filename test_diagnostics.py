@@ -58,6 +58,10 @@ check("Correlation matrix is 7x7", r.corr_det.shape == (7, 7), r.corr_det.shape)
 check("Average off-diagonal is finite", np.isfinite(r.avg_offdiag_det), r.avg_offdiag_det)
 check("Prescience empty without LLM", r.prescience.empty)
 check("LLM columns are None without a client", r.faithfulness_llm is None and r.correctness_llm is None)
+check("Signal Sharpe table has a row per driver",
+      len(r.signal_sharpe_det) == 7 and "sharpe" in r.signal_sharpe_det.columns)
+check("Multi-horizon correctness computed for each horizon",
+      len(r.correctness_by_horizon_det) == 3 and all(len(v) == 7 for v in r.correctness_by_horizon_det.values()))
 
 # ── 2: with a stub LLM — side-by-side machinery ──────────────────────────────
 r2 = run_diagnostics(macro_rates_analysts, macro, prices, "2022-01-01", "2024-12-31",
@@ -67,6 +71,9 @@ check("LLM faithfulness table populated", r2.faithfulness_llm is not None and le
 check("LLM correctness table populated", r2.correctness_llm is not None and len(r2.correctness_llm) == 7)
 check("LLM reasoning on-topic populated", r2.reasoning_llm is not None and len(r2.reasoning_llm) == 7)
 check("LLM correlation matrix computed", r2.corr_llm is not None and r2.corr_llm.shape == (7, 7))
+check("LLM signal Sharpe populated", r2.signal_sharpe_llm is not None and len(r2.signal_sharpe_llm) == 7)
+check("LLM multi-horizon correctness populated",
+      r2.correctness_by_horizon_llm is not None and len(r2.correctness_by_horizon_llm) == 3)
 check("Prescience table populated with LLM", not r2.prescience.empty and "information_gain" in r2.prescience.columns)
 check("Prescience captured term_premium overrides (stub forces 'up')",
       int(r2.prescience.loc["term_premium", "override_n"]) > 0,
