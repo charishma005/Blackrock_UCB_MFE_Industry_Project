@@ -28,6 +28,8 @@ PUBLICATION_LAG_DAYS: dict[str, int] = {
     "CPIAUCSL": 14,   # monthly CPI, released ~2 weeks after the reference month
     "UNRATE": 7,      # monthly jobs report, released ~1st Friday of following month
     "PAYEMS": 7,      # nonfarm payrolls, same release as UNRATE
+    "NFCI": 7,        # weekly (Wed-dated) financial conditions, released the following week
+    # T10YIE / DFII10 are daily market series → publish same-day → default lag 0.
 }
 
 

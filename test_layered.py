@@ -50,7 +50,7 @@ world = AsOf(asof=asof, macro=macro, prices=prices)
 analysts = macro_rates_analysts(llm_client=None)
 views = [a.form_view(world) for a in analysts]
 by = {v.driver: v for v in views}
-check("Four single-driver analysts produced views", len(views) == 4, [v.driver for v in views])
+check("Seven single-driver analysts produced views", len(views) == 7, [v.driver for v in views])
 check("Inflation analyst sees inflation rising (hawkish regime)",
       by["inflation"].direction == "up", by["inflation"].direction)
 check("Labor analyst sees tightening (hawkish regime)",
@@ -103,7 +103,7 @@ check("Research scorer penalizes a wrong always-up analyst", sc2["hit_rate"] == 
 # ── 6: weekly backtest end to end ───────────────────────────────────────────
 bt = run_weekly(fund, macro, prices, "2022-06-01", "2024-12-31")
 check("Weekly run produced an equity curve", len(bt.values) > 100, len(bt.values))
-check("Research scorecard has a row per driver", len(bt.research_scorecard) == 4, bt.research_scorecard.index.tolist())
+check("Research scorecard has a row per driver", len(bt.research_scorecard) == 7, bt.research_scorecard.index.tolist())
 check("Metrics include Sharpe", "sharpe" in bt.metrics)
 check("Equity curve is finite", np.isfinite(bt.values.iloc[-1]), bt.values.iloc[-1])
 

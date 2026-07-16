@@ -44,8 +44,16 @@ class SingleDriverAnalyst(ABC):
     horizon_days: int = 63           # default view horizon (~one quarter)
     inputs: tuple[str, ...] = ()     # series/symbols this analyst is allowed to read
 
-    def __init__(self, llm_client=None):
+    def __init__(self, llm_client=None, *, input_mode: str = "vector", text_source=None):
         self.llm = llm_client
+        # The experiment's only knob: what the Phase-2 LLM reasons over.
+        #   "vector"       — the numeric deterministic reading (original behavior)
+        #   "text"         — the point-in-time FOMC document only
+        #   "text+vector"  — both
+        # ``text_source`` is any object exposing ``as_of(asof) -> str | None`` (see
+        # src/data/fomc_text.FomcCorpus). It is only consulted in the text arms.
+        self.input_mode = input_mode
+        self.text_source = text_source
         self.persona = self._load_persona()
 
     def _load_persona(self) -> dict:
@@ -81,6 +89,27 @@ class SingleDriverAnalyst(ABC):
         )
         return "\n\n".join(parts)
 
+    def _user_prompt(self, view: DriverView, reading: dict) -> str:
+        """The Phase-2 input — the ONE thing that changes between input arms.
+
+        System prompt, output contract, and all downstream scoring are identical
+        across arms, so any performance difference is attributable purely to the
+        input the LLM reasons over.
+        """
+        header = f"Driver: {self.driver}\n"
+        numeric = (f"Deterministic reading (as of {view.asof.date()}):\n"
+                   f"{json.dumps(reading, indent=2, default=str)}")
+        if self.input_mode == "vector":
+            return header + numeric
+        text = self.text_source.as_of(view.asof) if self.text_source is not None else None
+        doc = getattr(self.text_source, "doc_type", "document")
+        text_block = (f"Latest FOMC {doc} available as of {view.asof.date()}:\n{text}"
+                      if text else
+                      f"(no FOMC {doc} available as of {view.asof.date()})")
+        if self.input_mode == "text":
+            return header + text_block
+        return header + numeric + "\n\n" + text_block  # text+vector
+
     def _refine(self, view: DriverView, reading: dict) -> DriverView:
         """One LLM call. Falls back to the Phase-1 view on any failure."""
         if self.llm is None:
@@ -88,11 +117,7 @@ class SingleDriverAnalyst(ABC):
         try:
             raw = self.llm.complete(
                 system=self._system_prompt(),
-                user=(
-                    f"Driver: {self.driver}\n"
-                    f"Deterministic reading (as of {view.asof.date()}):\n"
-                    f"{json.dumps(reading, indent=2, default=str)}"
-                ),
+                user=self._user_prompt(view, reading),
             )
             parsed = json.loads(raw)
             return view.model_copy(update={

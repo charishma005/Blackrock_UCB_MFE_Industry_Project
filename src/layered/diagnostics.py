@@ -62,12 +62,19 @@ def collect(
     prices: pd.DataFrame,
     dates: pd.DatetimeIndex,
     label: str,
+    progress=None,
 ) -> AnalystRun:
-    """Run every analyst at every date (via the AsOf gate) and tabulate views."""
+    """Run every analyst at every date (via the AsOf gate) and tabulate views.
+
+    ``progress(label, i, total)`` is called after each meeting (if given) so a
+    launcher can render a live counter — the LLM pass is otherwise a silent
+    multi-minute loop.
+    """
     signed, direction, conviction, level = {}, {}, {}, {}
     reasoning: dict[str, dict] = {}
     views: dict[str, list[DriverView]] = {}
-    for asof in dates:
+    total = len(dates)
+    for i, asof in enumerate(dates, 1):
         world = AsOf(asof=asof, macro=macro, prices=prices)   # slices to <= asof
         for a in analysts:
             v = a.form_view(world)
@@ -77,6 +84,8 @@ def collect(
             level.setdefault(a.driver, {})[asof] = v.level if v.level is not None else np.nan
             reasoning.setdefault(a.driver, {})[asof] = v.reasoning
             views.setdefault(a.driver, []).append(v)
+        if progress is not None:
+            progress(label, i, total)
     return AnalystRun(
         label=label,
         signed=pd.DataFrame(signed).sort_index(),
@@ -192,6 +201,13 @@ _DRIVER_LEXICON: dict[str, list[str]] = {
     "labor_tightness": ["labor", "unemploy", "employ", "payroll", "jobs", "wage", "sahm"],
     "balance_sheet": ["balance sheet", "qt", "runoff", "reserve", "liquidity", "quantitative", "fed asset", "walcl"],
     "term_premium": ["term premium", "long end", "long-end", "10-year", "10y", "duration", "supply", "issuance"],
+    # Feature analysts. NOTE: "2s10s"/"curve" are also in _TRADE_TERMS, so curve_slope's
+    # own on-topic vocabulary overlaps the contamination list — its contamination_rate
+    # will read artificially high (a coarse-proxy artifact, not real mandate drift; it
+    # still passes the structural input_isolation check).
+    "curve_slope": ["2s10s", "slope", "steepen", "flatten", "curve", "spread"],
+    "inflation_expectations": ["breakeven", "break-even", "t10yie", "expectation", "expected inflation"],
+    "financial_conditions": ["financial conditions", "nfci", "tighten", "eas", "credit", "conditions"],
 }
 _TRADE_TERMS = ["flattener", "steepener", "2s10s", "curve", "overweight", "underweight",
                 "long the", "short the", "position", "spread trade"]
@@ -395,6 +411,7 @@ def run_diagnostics(
     llm_client=None,
     source: str = "synthetic",
     regime: str | None = None,
+    progress=None,
 ) -> DiagnosticsReport:
     """Run all four diagnostics for the deterministic agents and (if a client is
     given) the LLM agents, on the same schedule and data.
@@ -407,8 +424,9 @@ def run_diagnostics(
     dates = pd.DatetimeIndex(sorted({prices.index[prices.index <= d][-1]
                                      for d in targets if len(prices.index[prices.index <= d])}))
 
-    det_run = collect(make_analysts(None), macro, prices, dates, "deterministic")
-    llm_run = collect(make_analysts(llm_client), macro, prices, dates, "llm") if llm_client else None
+    det_run = collect(make_analysts(None), macro, prices, dates, "deterministic", progress=progress)
+    llm_run = (collect(make_analysts(llm_client), macro, prices, dates, "llm", progress=progress)
+               if llm_client else None)
     truth_level = det_run.level                       # objective per-driver measurements
 
     iso = input_isolation(make_analysts(None), macro, prices, dates[-1])

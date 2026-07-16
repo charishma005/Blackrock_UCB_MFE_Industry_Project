@@ -1,0 +1,7 @@
+# Analyst mandate spec — market-implied inflation expectations (10y breakeven).
+display_name: "inflation expectations (10y breakeven)"
+mandate:
+  - "Judge whether market-implied inflation expectations are rising or falling."
+  - "Rising 10y breakeven = direction up; falling = down."
+  - "This is the market's forward expectation, distinct from realized CPI."
+  - "Do not reason about realized inflation, policy, or any trade — only breakeven expectations."

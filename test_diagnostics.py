@@ -47,14 +47,14 @@ macro, prices = generate("2022-01-01", "2024-12-31", regime="hawkish")
 # ── 1: deterministic-only ────────────────────────────────────────────────────
 r = run_diagnostics(macro_rates_analysts, macro, prices, "2022-01-01", "2024-12-31",
                     llm_client=None, source="synthetic", regime="hawkish")
-check("Deterministic run has 4 analysts in input isolation", len(r.input_isolation) == 4,
+check("Deterministic run has 7 analysts in input isolation", len(r.input_isolation) == 7,
       r.input_isolation.index.tolist())
 check("All analysts pass input isolation", bool(r.input_isolation["isolation_ok"].all()))
 check("No analyst reads past asof", bool(r.input_isolation["no_lookahead"].all()))
 check("Deterministic faithfulness own_corr == 1", bool((r.faithfulness_det["own_corr"] == 1.0).all()),
       r.faithfulness_det["own_corr"].tolist())
-check("Correctness table has a row per driver", len(r.correctness_det) == 4)
-check("Correlation matrix is 4x4", r.corr_det.shape == (4, 4), r.corr_det.shape)
+check("Correctness table has a row per driver", len(r.correctness_det) == 7)
+check("Correlation matrix is 7x7", r.corr_det.shape == (7, 7), r.corr_det.shape)
 check("Average off-diagonal is finite", np.isfinite(r.avg_offdiag_det), r.avg_offdiag_det)
 check("Prescience empty without LLM", r.prescience.empty)
 check("LLM columns are None without a client", r.faithfulness_llm is None and r.correctness_llm is None)
@@ -63,10 +63,10 @@ check("LLM columns are None without a client", r.faithfulness_llm is None and r.
 r2 = run_diagnostics(macro_rates_analysts, macro, prices, "2022-01-01", "2024-12-31",
                      llm_client=StubLLM(), source="synthetic", regime="hawkish")
 check("LLM run flags has_llm", r2.has_llm)
-check("LLM faithfulness table populated", r2.faithfulness_llm is not None and len(r2.faithfulness_llm) == 4)
-check("LLM correctness table populated", r2.correctness_llm is not None and len(r2.correctness_llm) == 4)
-check("LLM reasoning on-topic populated", r2.reasoning_llm is not None and len(r2.reasoning_llm) == 4)
-check("LLM correlation matrix computed", r2.corr_llm is not None and r2.corr_llm.shape == (4, 4))
+check("LLM faithfulness table populated", r2.faithfulness_llm is not None and len(r2.faithfulness_llm) == 7)
+check("LLM correctness table populated", r2.correctness_llm is not None and len(r2.correctness_llm) == 7)
+check("LLM reasoning on-topic populated", r2.reasoning_llm is not None and len(r2.reasoning_llm) == 7)
+check("LLM correlation matrix computed", r2.corr_llm is not None and r2.corr_llm.shape == (7, 7))
 check("Prescience table populated with LLM", not r2.prescience.empty and "information_gain" in r2.prescience.columns)
 check("Prescience captured term_premium overrides (stub forces 'up')",
       int(r2.prescience.loc["term_premium", "override_n"]) > 0,

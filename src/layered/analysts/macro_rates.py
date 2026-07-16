@@ -30,7 +30,12 @@ from src.layered.timeline import AsOf
 # FRED series the macro-rates analysts read. WALCL (Fed total assets) is not in
 # the flat ensemble's DEFAULT_UNIVERSE, so the layered orchestrator fetches this
 # bundle itself.
-MACRO_RATES_SERIES: tuple[str, ...] = ("CPIAUCSL", "UNRATE", "WALCL", "DGS10", "DGS2")
+MACRO_RATES_SERIES: tuple[str, ...] = (
+    "CPIAUCSL", "UNRATE", "WALCL", "DGS10", "DGS2",
+    "T10YIE", "NFCI",   # feature analysts: breakeven, financial conditions
+)
+# (real_rates/DFII10 was prototyped but dropped: 0.86 corr with term_premium
+#  failed the independence gate — near-duplicate of the nominal 10y.)
 
 
 def _direction(momentum: float, eps: float) -> DriverDirection:
@@ -148,11 +153,94 @@ class TermPremiumAnalyst(SingleDriverAnalyst):
         )
 
 
-def macro_rates_analysts(llm_client=None) -> list[SingleDriverAnalyst]:
-    """The research pool the macro rates PM listens to."""
+class CurveSlopeAnalyst(SingleDriverAnalyst):
+    driver = "curve_slope"
+    inputs = ("DGS2", "DGS10")            # reads two points on the curve
+
+    def read(self, world: AsOf) -> DriverView:
+        d2 = world.series("DGS2")
+        d10 = world.series("DGS10")
+        if min(len(d2), len(d10)) < 30:
+            return DriverView(driver=self.driver, asof=world.asof, direction="flat",
+                              conviction=0.0, horizon_days=self.horizon_days,
+                              reasoning="insufficient curve history")
+        slope = (d10 - d2).dropna()                       # 2s10s = 10y − 2y, in yield points
+        current = float(slope.iloc[-1])
+        prior = float(slope.iloc[-63]) if len(slope) >= 63 else float(slope.iloc[0])
+        change = current - prior                          # + = steepening
+        direction = _direction(change, eps=0.03)          # slope moves are lower-amplitude than levels
+        conv = _conviction(abs(change), 0.40)             # ~40bp of slope change/qtr = strong
+        return DriverView(
+            driver=self.driver, asof=world.asof, direction=direction,
+            conviction=round(conv, 3), horizon_days=self.horizon_days, level=round(current, 3),
+            reasoning=f"2s10s slope {current:+.2f} ({change:+.2f} over ~1q) → "
+                      f"{'steepening' if direction=='up' else 'flattening' if direction=='down' else 'stable'}",
+        )
+
+
+class InflationExpectationsAnalyst(SingleDriverAnalyst):
+    driver = "inflation_expectations"
+    inputs = ("T10YIE",)                  # 10y breakeven inflation (daily)
+
+    def read(self, world: AsOf) -> DriverView:
+        ie = world.series("T10YIE").dropna()
+        if len(ie) < 30:
+            return DriverView(driver=self.driver, asof=world.asof, direction="flat",
+                              conviction=0.0, horizon_days=self.horizon_days,
+                              reasoning="insufficient breakeven history")
+        current = float(ie.iloc[-1])
+        prior = float(ie.iloc[-63]) if len(ie) >= 63 else float(ie.iloc[0])
+        change = current - prior                          # + = expectations rising
+        direction = _direction(change, eps=0.05)
+        conv = _conviction(abs(change), 0.50)
+        return DriverView(
+            driver=self.driver, asof=world.asof, direction=direction,
+            conviction=round(conv, 3), horizon_days=self.horizon_days, level=round(current, 3),
+            reasoning=f"10y breakeven {current:.2f}% ({change:+.2f} over ~1q) → "
+                      f"breakeven expectations {'rising' if direction=='up' else 'falling' if direction=='down' else 'stable'}",
+        )
+
+
+class FinancialConditionsAnalyst(SingleDriverAnalyst):
+    driver = "financial_conditions"
+    inputs = ("NFCI",)                    # Chicago Fed financial conditions (weekly; + = tighter)
+
+    def read(self, world: AsOf) -> DriverView:
+        nfci = world.series("NFCI").dropna()
+        if len(nfci) < 13:                                # ~13 weekly obs ≈ one quarter
+            return DriverView(driver=self.driver, asof=world.asof, direction="flat",
+                              conviction=0.0, horizon_days=self.horizon_days,
+                              reasoning="insufficient financial-conditions history")
+        current = float(nfci.iloc[-1])
+        prior = float(nfci.iloc[-13]) if len(nfci) >= 13 else float(nfci.iloc[0])
+        change = current - prior                          # + = tightening
+        direction = _direction(change, eps=0.05)
+        # blend momentum with how far conditions sit from neutral (0)
+        conv = 0.7 * _conviction(abs(change), 0.30) + 0.3 * _conviction(abs(current), 0.50)
+        return DriverView(
+            driver=self.driver, asof=world.asof, direction=direction,
+            conviction=round(conv, 3), horizon_days=self.horizon_days, level=round(current, 3),
+            reasoning=f"NFCI {current:+.2f} ({change:+.2f}/qtr) → financial conditions "
+                      f"{'tightening' if direction=='up' else 'easing' if direction=='down' else 'stable'}",
+        )
+
+
+def macro_rates_analysts(llm_client=None, *, input_mode: str = "vector",
+                         text_source=None) -> list[SingleDriverAnalyst]:
+    """The research pool the macro rates PM listens to.
+
+    ``input_mode`` / ``text_source`` are threaded to every analyst so the Phase-2
+    LLM can be fed numbers, FOMC text, or both — the only thing that varies across
+    the input-modality experiment. With ``input_mode="vector"`` (the default) this
+    is byte-for-byte the original behavior.
+    """
+    kw = dict(input_mode=input_mode, text_source=text_source)
     return [
-        InflationAnalyst(llm_client),
-        LaborMarketAnalyst(llm_client),
-        BalanceSheetAnalyst(llm_client),
-        TermPremiumAnalyst(llm_client),
+        InflationAnalyst(llm_client, **kw),
+        LaborMarketAnalyst(llm_client, **kw),
+        BalanceSheetAnalyst(llm_client, **kw),
+        TermPremiumAnalyst(llm_client, **kw),
+        CurveSlopeAnalyst(llm_client, **kw),
+        InflationExpectationsAnalyst(llm_client, **kw),
+        FinancialConditionsAnalyst(llm_client, **kw),
     ]

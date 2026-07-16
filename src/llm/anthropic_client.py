@@ -52,6 +52,12 @@ class AnthropicClient:
         if not key:
             raise RuntimeError("Set ANTHROPIC_API_KEY (or pass api_key=...)")
         self._client = anthropic.Anthropic(api_key=key)
+        # Audit trail — accumulate across the run so every launch reports how many
+        # calls it made, how many tokens it burned, and the estimated cost.
+        self.calls = 0
+        self.retries = 0
+        self.input_tokens = 0
+        self.output_tokens = 0
 
     def complete(self, system: str, user: str) -> str:
         """Returns a raw JSON string (parsed by the caller into a Pydantic model).
@@ -69,6 +75,11 @@ class AnthropicClient:
                     system=system,
                     messages=[{"role": "user", "content": user}],
                 )
+                u = getattr(resp, "usage", None)
+                if u is not None:
+                    self.calls += 1
+                    self.input_tokens += getattr(u, "input_tokens", 0) or 0
+                    self.output_tokens += getattr(u, "output_tokens", 0) or 0
                 text = "".join(
                     block.text for block in resp.content if getattr(block, "type", None) == "text"
                 )
@@ -78,6 +89,7 @@ class AnthropicClient:
             except Exception as e:  # noqa: BLE001 — transient (429 / 5xx / network / parse): retry
                 last_err = e
                 if attempt < self.max_retries:
+                    self.retries += 1
                     time.sleep(self.retry_backoff_seconds * attempt)
         raise RuntimeError(f"LLM call failed after {self.max_retries} attempts: {last_err}")
 
@@ -90,6 +102,31 @@ class AnthropicClient:
             max_tokens=1,
             messages=[{"role": "user", "content": "ping"}],
         )
+
+    # USD per 1M tokens (input, output); prefix match, falls back to Haiku rates.
+    _PRICES = {
+        "claude-fable-5": (10.0, 50.0),
+        "claude-opus-4-8": (5.0, 25.0),
+        "claude-sonnet-5": (3.0, 15.0),
+        "claude-haiku-4-5": (1.0, 5.0),
+    }
+
+    def usage_summary(self) -> dict:
+        """Auditable per-run token + cost tally (see estimate before you launch)."""
+        p_in, p_out = 1.0, 5.0  # default to Haiku
+        for prefix, (i, o) in self._PRICES.items():
+            if self.model.startswith(prefix):
+                p_in, p_out = i, o
+                break
+        return {
+            "model": self.model,
+            "calls": self.calls,
+            "retries": self.retries,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "est_cost_usd": round(self.input_tokens / 1e6 * p_in
+                                  + self.output_tokens / 1e6 * p_out, 4),
+        }
 
 
 def _extract_json(text: str) -> str:

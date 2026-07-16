@@ -62,6 +62,14 @@ def generate(
     dgs2 = pd.Series(d2, index=bdays, name="DGS2").round(3)
     dgs10 = pd.Series(d10, index=bdays, name="DGS10").round(3)
 
+    # ── Feature series (breakeven, real yield, financial conditions) ─────────
+    # Breakeven inflation rises with the inflation regime (daily).
+    t10yie = pd.Series(2.3 + s * 0.8 * t_day + rng.normal(0, 0.01, n_days),
+                       index=bdays, name="T10YIE").round(3)
+    # Financial conditions tighten under the hawkish regime (weekly; + = tighter).
+    nfci = pd.Series(-0.1 + s * 0.8 * np.linspace(0, 1, len(weeks)) + rng.normal(0, 0.02, len(weeks)),
+                     index=weeks, name="NFCI").round(3)
+
     # ── Bond prices from yields: ΔP ≈ -duration × Δy (per 1.0 = 100bp) ──────
     def price_from_yield(yld: pd.Series, dur: float) -> pd.Series:
         dprice = -dur * yld.diff().fillna(0.0) / 100.0 * 100.0  # yields already in %
@@ -71,5 +79,6 @@ def generate(
     ief = price_from_yield(dgs10, _DUR["IEF"])
     prices = pd.DataFrame({"SHY": shy.values, "IEF": ief.values}, index=bdays)
 
-    macro = {"CPIAUCSL": cpi, "UNRATE": unrate, "WALCL": walcl, "DGS10": dgs10, "DGS2": dgs2}
+    macro = {"CPIAUCSL": cpi, "UNRATE": unrate, "WALCL": walcl, "DGS10": dgs10, "DGS2": dgs2,
+             "T10YIE": t10yie, "NFCI": nfci}
     return macro, prices

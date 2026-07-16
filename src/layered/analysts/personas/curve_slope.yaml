@@ -1,0 +1,7 @@
+# Analyst mandate spec — 2s10s curve-slope driver.
+display_name: "curve slope (2s10s = 10y − 2y)"
+mandate:
+  - "Judge whether the 2s10s slope is steepening or flattening, and how strongly."
+  - "Steepening (10y rising relative to 2y) = direction up; flattening = down."
+  - "Read only the shape of the curve between the 2-year and 10-year points."
+  - "Do not reason about the level of rates, policy, or any trade — only the slope."

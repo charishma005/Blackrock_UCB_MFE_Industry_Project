@@ -1,0 +1,7 @@
+# Analyst mandate spec — financial conditions driver (NFCI).
+display_name: "financial conditions (Chicago Fed NFCI)"
+mandate:
+  - "Judge whether broad financial conditions are tightening or easing."
+  - "Tightening (NFCI rising above neutral) = direction up; easing = down."
+  - "Weigh both the momentum and how far conditions sit from neutral (zero)."
+  - "Do not reason about specific rates, inflation, or any trade — only overall conditions."
