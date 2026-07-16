@@ -29,6 +29,7 @@ next-day returns (shift(1) — no lookahead).
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -81,6 +82,8 @@ class BacktestResult:
     rebalance_signals: dict[pd.Timestamp, dict[str, dict]] = field(default_factory=dict)  # Dalio per date, full reasoning
     risk_diag_history: dict[pd.Timestamp, dict] = field(default_factory=dict)   # per-rebalance risk-layer diagnostics
     pm_reasoning_history: dict[pd.Timestamp, str] = field(default_factory=dict) # per-rebalance PM reasoning text
+    attribution: object | None = None          # AttributionTracker, for per-agent paper P&L in diagnostics
+    asset_returns: pd.DataFrame | None = None  # (date x symbol) daily returns used for attribution
 
 
 def _blend_target_weights(
@@ -191,7 +194,19 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
     risk_diag_history: dict[pd.Timestamp, dict] = {}
     pm_reasoning_history: dict[pd.Timestamp, str] = {}
 
-    for asof in rebalance_dates:
+    # Heartbeat to stderr so a long run (each rebalance fires live LLM calls
+    # for Ray Dalio) visibly makes progress instead of looking hung. stderr is
+    # unbuffered enough with flush=True even when stdout is redirected to a
+    # file, and it keeps the results table on stdout clean.
+    n_reb = len(rebalance_dates)
+    if n_reb:
+        print(f"[backtest:{config.weighting}] {n_reb} rebalance dates "
+              f"{rebalance_dates[0].date()} → {rebalance_dates[-1].date()}",
+              file=sys.stderr, flush=True)
+
+    for i, asof in enumerate(rebalance_dates, start=1):
+        print(f"[backtest:{config.weighting}] rebalance {i}/{n_reb}  {asof.date()}",
+              file=sys.stderr, flush=True)
         # No-lookahead slices: only data up to `asof` is visible to Dalio.
         macro_asof = {sid: s.loc[:asof] for sid, s in macro_full.items()}
         prices_asof = prices.loc[:asof]
@@ -214,9 +229,18 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
         scorecard = tracker.scorecard(rets_so_far, windows=eval_windows)
         scorecards_history[asof] = scorecard
 
+        # Always update fire/strike state from the scorecard, regardless of
+        # blending mode. wm.update() is the ONLY place strikes accumulate and
+        # agents enter wm.fired, so calling it unconditionally is what lets
+        # equal-weight genuinely "respect hard-fire logic" as documented,
+        # instead of never firing anyone. It's cheap — pure Python over an
+        # already-computed scorecard — and the performance branch is unchanged
+        # (same single call per rebalance, its return value used as before).
+        performance_weights = wm.update(scorecard)
+
         if config.weighting == "performance":
-            agent_weights = wm.update(scorecard)
-        else:  # equal-weight, still respects hard-fire logic for a fair comparison
+            agent_weights = performance_weights
+        else:  # equal-weight among survivors of the SAME firing logic
             active = [a for a in agents_seen if a not in wm.fired]
             agent_weights = {a: 1.0 / len(active) for a in active} if active else {}
 
@@ -270,6 +294,8 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
         rebalance_signals=rebalance_signals_history,
         risk_diag_history=risk_diag_history,
         pm_reasoning_history=pm_reasoning_history,
+        attribution=tracker,
+        asset_returns=rets,
     )
 
 

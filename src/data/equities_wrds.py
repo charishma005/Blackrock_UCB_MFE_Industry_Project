@@ -46,8 +46,77 @@ import pandas as pd
 
 
 def _get_connection():
+    """Open a WRDS connection without prompting on every run.
+
+    Two prompts happen with a bare `wrds.Connection()`: username and password.
+    We suppress both:
+
+    - Username: read from $WRDS_USERNAME (the env var run_backtest.py already
+      checks for). Passed as `wrds_username=` so wrds never prompts for it.
+    - Password: wrds reads it from ~/.pgpass automatically if that file exists.
+      Create it ONCE with:  python -c "import wrds; wrds.Connection(wrds_username='YOUR_USER').create_pgpass_file()"
+      (it will prompt for the password that one time, then write ~/.pgpass so
+      no future run prompts again).
+
+    If $WRDS_USERNAME is unset we fall back to bare Connection() so interactive
+    use still works.
+    """
     import wrds
-    return wrds.Connection(wrds_username=os.environ.get("WRDS_USERNAME"))
+
+    username = os.environ.get("WRDS_USERNAME")
+    if username:
+        return wrds.Connection(wrds_username=username)
+    return wrds.Connection()
+
+
+def check_connection() -> str:
+    """Preflight liveness check: open a WRDS connection AND run a trivial query
+    to prove the session is actually usable, then close it.
+
+    Why a query and not just `wrds.Connection()`: the connection object can be
+    constructed while the backing Postgres session is unauthenticated or the
+    subscription lacks query rights, so `SELECT 1` is what confirms the pipe is
+    really alive. Call this ONCE up front (see run_backtest) so a bad
+    connection fails in the first second with an actionable message, instead of
+    hanging or erroring deep inside the rebalance loop after minutes of setup.
+
+    Returns the WRDS username used on success; raises RuntimeError with guidance
+    on any failure.
+    """
+    try:
+        import wrds  # noqa: F401  (import error is itself a failure we want to report)
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            "`wrds` is not installed. Install with: pip install wrds "
+            "(or `pip install \"multi-asset-fund[wrds]\"`)."
+        ) from e
+
+    try:
+        db = _get_connection()
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            "Could not OPEN a WRDS connection. Check: WRDS_USERNAME is set, your "
+            "password is in ~/.pgpass (create it once with "
+            "`python -c \"import wrds; wrds.Connection(wrds_username='YOUR_USER')"
+            ".create_pgpass_file()\"`), and that wrds.wharton.upenn.edu is "
+            f"reachable from this network. Underlying error: {e}"
+        ) from e
+
+    try:
+        db.raw_sql("SELECT 1")
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            "Opened a WRDS connection but a trivial `SELECT 1` FAILED — the "
+            "session is not usable (authenticated but query layer or Compustat "
+            f"subscription unavailable?). Underlying error: {e}"
+        ) from e
+    finally:
+        try:
+            db.close()
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            pass
+
+    return os.environ.get("WRDS_USERNAME", "(interactive)")
 
 
 @lru_cache(maxsize=None)
@@ -60,7 +129,7 @@ def _fetch_fundq_history(ticker: str) -> pd.DataFrame:
     # gvkey lookup via the ticker->gvkey linking table (comp.security), then
     # pull fundq filtered to that gvkey. tic = Compustat's own ticker field.
     query = f"""
-        SELECT f.gvkey, f.datadate, f.rdq, f.niq, f.dpq, f.capxy, f.oancfy,
+        SELECT f.gvkey, f.datadate, f.rdq, f.fqtr, f.niq, f.dpq, f.capxy, f.oancfy,
                f.fincfy, f.seqq, f.dlttq, f.dlcq, f.cshoq, f.prccq, f.epsfxq,
                f.oibdpq, f.saleq
         FROM comp.fundq f
@@ -77,10 +146,15 @@ def _fetch_fundq_history(ticker: str) -> pd.DataFrame:
 def _ytd_to_quarterly(df: pd.DataFrame, col: str) -> pd.Series:
     """Compustat *Y items (capxy, oancfy, fincfy) are YEAR-TO-DATE cumulative
     within each fiscal year, not per-quarter — Q2 - Q1 gives the true Q2
-    flow. Resets at the first fiscal quarter of each year."""
-    out = df[col].copy()
-    fiscal_q = pd.to_datetime(df["datadate"]).dt.quarter
-    is_q1 = fiscal_q == 1
+    flow. Resets at the first fiscal quarter of each year.
+
+    Use Compustat's own fiscal-quarter field `fqtr`, NOT the calendar quarter
+    of `datadate`. For a firm whose fiscal year doesn't end in December (e.g.
+    Apple, fyr=9), fiscal Q1 ends in a calendar quarter other than Q1, so
+    keying the reset off `datadate.dt.quarter` de-accumulates at the wrong
+    rows and corrupts every YTD-derived flow (capex, OCF, financing CF, FCF).
+    """
+    is_q1 = df["fqtr"] == 1
     diffed = df[col].diff()
     diffed[is_q1] = df[col][is_q1]  # Q1's YTD figure IS the quarterly figure
     return diffed

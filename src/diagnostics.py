@@ -151,6 +151,64 @@ def scorecard_and_weights(result) -> None:
     print(f"\n  fired agents: {result.fired_agents or 'none'}")
 
 
+def agent_pnl_contribution(result) -> None:
+    """Per-agent contribution to the book's return: sum_t (agent_weight_t x
+    agent_paper_return_t). Paper Sharpe (section 4) tells you who's skilful;
+    this tells you who actually MOVED the P&L given the weight they were run at.
+    A great agent held at tiny weight contributes little; a mediocre one held
+    large can dominate — this is the number to act on when deciding firing."""
+    _rule("5. PER-AGENT P&L CONTRIBUTION — who actually moved the book?")
+    tracker = getattr(result, "attribution", None)
+    ar = getattr(result, "asset_returns", None)
+    aw = result.agent_weights_history
+    if tracker is None or ar is None or not len(aw):
+        print("  (attribution/returns not exposed on result — skipping)")
+        return
+    # daily agent weights (rebalance-dated -> ffilled to daily, no lookahead)
+    daily_w = aw.reindex(ar.index).ffill().fillna(0.0)
+    rows = []
+    for agent in aw.columns:
+        pr = tracker.paper_returns(agent, ar)
+        w_lag = daily_w[agent].shift(1).reindex(pr.index).fillna(0.0)
+        contrib = float((w_lag * pr).sum())
+        rows.append({
+            "agent": agent,
+            "contribution": contrib,
+            "avg_weight": float(daily_w[agent].mean()),
+            "solo_return": float(pr.sum()),
+        })
+    df = pd.DataFrame(rows).set_index("agent").sort_values("contribution")
+    total = df["contribution"].sum()
+    df["share_of_active"] = df["contribution"] / total if total else float("nan")
+    with pd.option_context("display.width", 200, "display.max_columns", 20):
+        print(df.round(4).to_string())
+    print(f"\n  sum of agent contributions (~active return): {total:+.4f}")
+    print("  (negative contributors are the drag; concentrate weight away from them)")
+
+
+def benchmark_relative(result, cfg) -> None:
+    """Information ratio of the strategy vs the equal-weight buy-and-hold
+    benchmark — the honest scorecard. Beating raw long exposure in a bull year
+    is the wrong bar; IR asks whether the ACTIVE bets add value per unit of
+    tracking error, which is regime-agnostic."""
+    _rule("6. BENCHMARK-RELATIVE — information ratio vs buy-and-hold")
+    from src.backtest.engine import run_benchmark
+    bench = run_benchmark(cfg)
+    s = daily_returns(result.values)
+    b = daily_returns(bench.values)
+    active = (s - b).dropna()
+    if len(active) < 2 or active.std() == 0:
+        print("  (insufficient overlap to compute IR)")
+        return
+    ir = float(np.sqrt(TRADING_DAYS) * active.mean() / active.std())
+    print(f"  strategy total return  : {result.values.iloc[-1]/result.values.iloc[0]-1:+.2%}")
+    print(f"  benchmark total return : {bench.values.iloc[-1]/bench.values.iloc[0]-1:+.2%}")
+    print(f"  annualized active ret  : {active.mean()*TRADING_DAYS:+.2%}")
+    print(f"  tracking error (ann)   : {active.std()*np.sqrt(TRADING_DAYS):.2%}")
+    print(f"  INFORMATION RATIO      : {ir:+.2f}   <- active value-add, regime-agnostic")
+    print("  (IR < 0 means the active bets subtracted value vs just holding the book)")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", default="2024-01-01")
@@ -189,6 +247,8 @@ def main() -> None:
     exposure_and_risk_layer(result)
     signal_distribution(result)
     scorecard_and_weights(result)
+    agent_pnl_contribution(result)
+    benchmark_relative(result, cfg)
 
 
 if __name__ == "__main__":

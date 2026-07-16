@@ -17,18 +17,20 @@ def daily_returns(values: pd.Series) -> pd.Series:
 
 
 def sharpe_ratio(returns: pd.Series, rf_annual: float = RISK_FREE_ANNUAL) -> float:
-    if len(returns) < 2 or returns.std() == 0:
+    excess = (returns - rf_annual / TRADING_DAYS).dropna()
+    std = excess.std()
+    if len(excess) < 2 or not np.isfinite(std) or std == 0:
         return float("nan")
-    excess = returns - rf_annual / TRADING_DAYS
-    return float(np.sqrt(TRADING_DAYS) * excess.mean() / excess.std())
+    return float(np.sqrt(TRADING_DAYS) * excess.mean() / std)
 
 
 def sortino_ratio(returns: pd.Series, rf_annual: float = RISK_FREE_ANNUAL) -> float:
-    excess = returns - rf_annual / TRADING_DAYS
+    excess = (returns - rf_annual / TRADING_DAYS).dropna()
     downside = excess[excess < 0]
-    if len(downside) < 2 or downside.std() == 0:
+    std = downside.std()
+    if len(excess) < 2 or len(downside) < 2 or not np.isfinite(std) or std == 0:
         return float("nan")
-    return float(np.sqrt(TRADING_DAYS) * excess.mean() / downside.std())
+    return float(np.sqrt(TRADING_DAYS) * excess.mean() / std)
 
 
 def max_drawdown(values: pd.Series) -> float:
