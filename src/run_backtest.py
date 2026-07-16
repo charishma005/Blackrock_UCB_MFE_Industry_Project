@@ -122,10 +122,21 @@ def main():
     if args.equity_data_source == "financialdatasets" and not os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         print("[warn] --equity-data-source financialdatasets but FINANCIAL_DATASETS_API_KEY is not set — "
               "requests will 401. Get a key (paid tier, ~$20 one-time credits) at financialdatasets.ai.\n")
-    if args.equity_data_source == "wrds" and not os.environ.get("WRDS_USERNAME"):
-        print("[warn] --equity-data-source wrds but WRDS_USERNAME is not set — the first WRDS query "
-              "will prompt interactively for credentials (or read ~/.pgpass). Set WRDS_USERNAME to "
-              "skip the username prompt.\n")
+    if args.equity_data_source == "wrds":
+        if not os.environ.get("WRDS_USERNAME"):
+            print("[warn] --equity-data-source wrds but WRDS_USERNAME is not set — the first WRDS query "
+                  "will prompt interactively for credentials (or read ~/.pgpass). Set WRDS_USERNAME to "
+                  "skip the username prompt.\n")
+        # Preflight the WRDS connection BEFORE loading data / running the loop.
+        # WRDS is a remote Postgres service; a dead/unauthorized connection would
+        # otherwise hang or crash minutes in. Fail fast with a clear message.
+        from src.data.equities_wrds import check_connection
+        print("[wrds] checking connection ...", flush=True)
+        try:
+            user = check_connection()
+        except RuntimeError as e:
+            raise SystemExit(f"[wrds] connection check FAILED — aborting.\n  {e}")
+        print(f"[wrds] connection OK (user={user})\n", flush=True)
 
     cfg = BacktestConfig(
         start=args.start, end=args.end, rebalance_freq=args.rebalance_freq,

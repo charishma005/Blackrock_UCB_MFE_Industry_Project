@@ -29,6 +29,7 @@ next-day returns (shift(1) — no lookahead).
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -81,6 +82,8 @@ class BacktestResult:
     rebalance_signals: dict[pd.Timestamp, dict[str, dict]] = field(default_factory=dict)  # Dalio per date, full reasoning
     risk_diag_history: dict[pd.Timestamp, dict] = field(default_factory=dict)   # per-rebalance risk-layer diagnostics
     pm_reasoning_history: dict[pd.Timestamp, str] = field(default_factory=dict) # per-rebalance PM reasoning text
+    attribution: object | None = None          # AttributionTracker, for per-agent paper P&L in diagnostics
+    asset_returns: pd.DataFrame | None = None  # (date x symbol) daily returns used for attribution
 
 
 def _blend_target_weights(
@@ -191,7 +194,19 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
     risk_diag_history: dict[pd.Timestamp, dict] = {}
     pm_reasoning_history: dict[pd.Timestamp, str] = {}
 
-    for asof in rebalance_dates:
+    # Heartbeat to stderr so a long run (each rebalance fires live LLM calls
+    # for Ray Dalio) visibly makes progress instead of looking hung. stderr is
+    # unbuffered enough with flush=True even when stdout is redirected to a
+    # file, and it keeps the results table on stdout clean.
+    n_reb = len(rebalance_dates)
+    if n_reb:
+        print(f"[backtest:{config.weighting}] {n_reb} rebalance dates "
+              f"{rebalance_dates[0].date()} → {rebalance_dates[-1].date()}",
+              file=sys.stderr, flush=True)
+
+    for i, asof in enumerate(rebalance_dates, start=1):
+        print(f"[backtest:{config.weighting}] rebalance {i}/{n_reb}  {asof.date()}",
+              file=sys.stderr, flush=True)
         # No-lookahead slices: only data up to `asof` is visible to Dalio.
         macro_asof = {sid: s.loc[:asof] for sid, s in macro_full.items()}
         prices_asof = prices.loc[:asof]
@@ -279,6 +294,8 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
         rebalance_signals=rebalance_signals_history,
         risk_diag_history=risk_diag_history,
         pm_reasoning_history=pm_reasoning_history,
+        attribution=tracker,
+        asset_returns=rets,
     )
 
 

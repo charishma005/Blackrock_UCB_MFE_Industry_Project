@@ -1,2 +1,6 @@
 # LLM response cache (large, machine-local)
 .llm_cache/
+
+# Python bytecode
+__pycache__/
+*.py[cod]

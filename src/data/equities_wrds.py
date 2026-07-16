@@ -69,6 +69,56 @@ def _get_connection():
     return wrds.Connection()
 
 
+def check_connection() -> str:
+    """Preflight liveness check: open a WRDS connection AND run a trivial query
+    to prove the session is actually usable, then close it.
+
+    Why a query and not just `wrds.Connection()`: the connection object can be
+    constructed while the backing Postgres session is unauthenticated or the
+    subscription lacks query rights, so `SELECT 1` is what confirms the pipe is
+    really alive. Call this ONCE up front (see run_backtest) so a bad
+    connection fails in the first second with an actionable message, instead of
+    hanging or erroring deep inside the rebalance loop after minutes of setup.
+
+    Returns the WRDS username used on success; raises RuntimeError with guidance
+    on any failure.
+    """
+    try:
+        import wrds  # noqa: F401  (import error is itself a failure we want to report)
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            "`wrds` is not installed. Install with: pip install wrds "
+            "(or `pip install \"multi-asset-fund[wrds]\"`)."
+        ) from e
+
+    try:
+        db = _get_connection()
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            "Could not OPEN a WRDS connection. Check: WRDS_USERNAME is set, your "
+            "password is in ~/.pgpass (create it once with "
+            "`python -c \"import wrds; wrds.Connection(wrds_username='YOUR_USER')"
+            ".create_pgpass_file()\"`), and that wrds.wharton.upenn.edu is "
+            f"reachable from this network. Underlying error: {e}"
+        ) from e
+
+    try:
+        db.raw_sql("SELECT 1")
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            "Opened a WRDS connection but a trivial `SELECT 1` FAILED — the "
+            "session is not usable (authenticated but query layer or Compustat "
+            f"subscription unavailable?). Underlying error: {e}"
+        ) from e
+    finally:
+        try:
+            db.close()
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            pass
+
+    return os.environ.get("WRDS_USERNAME", "(interactive)")
+
+
 @lru_cache(maxsize=None)
 def _fetch_fundq_history(ticker: str) -> pd.DataFrame:
     """Full quarterly fundamentals history for a ticker, oldest cached once

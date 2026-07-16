@@ -32,9 +32,24 @@ class AgentPolicy:
 @dataclass
 class WeightManager:
     temperature: float = 1.0  # softmax temperature; lower = more aggressive tilting
+    smoothing: float = 0.5    # EMA weight on the NEW target (0..1). The blended
+                              # weight is smoothing*new + (1-smoothing)*previous.
+                              # Rolling Sharpe is noisy week-to-week, so pushing
+                              # 100% of each new reading straight through whipsaws
+                              # the book and burns turnover for no edge; 0.5 halves
+                              # that churn. Set to 1.0 to disable smoothing.
+    strike_penalty: float = 0.75  # per-accumulated-strike penalty (in score
+                              # z-units) subtracted before the softmax. Hard
+                              # firing only triggers on `fire_after` persistent
+                              # strikes AND a losing full-sample record, which is
+                              # deliberately slow — this bleeds weight off a
+                              # struggling agent *gradually* as strikes pile up,
+                              # instead of paying it full weight right until the
+                              # moment it's finally fired. 0 = old all-or-nothing.
     policies: dict[str, AgentPolicy] = field(default_factory=dict)
     _strikes: dict[str, int] = field(default_factory=dict)
     _fired: set[str] = field(default_factory=set)
+    _prev_weights: dict[str, float] = field(default_factory=dict)
 
     def policy(self, agent: str) -> AgentPolicy:
         return self.policies.get(agent, AgentPolicy())
@@ -99,12 +114,27 @@ class WeightManager:
             # non-fired agents rather than returning empty — the blend is flat
             # either way, but this keeps the ensemble's bookkeeping sensible.
             if idle:
-                return {a: 1.0 / len(idle) for a in idle}
-            return {}
+                return self._finalize({a: 1.0 / len(idle) for a in idle})
+            return self._finalize({})
 
-        # softmax over scores
+        # Standardize scores before the softmax. rolling_sharpe is computed on
+        # per-agent windows of DIFFERENT lengths (macro agents get longer ones),
+        # and a longer-window Sharpe is mechanically smoother/less extreme — so
+        # raw scores aren't comparable and the softmax would tilt toward whoever
+        # happens to use the longer window, not whoever is actually better.
+        # Z-scoring puts every agent on a common scale so temperature means the
+        # same thing for all of them.
         arr = np.array(list(scores.values()), dtype=float)
-        expd = np.exp((arr - arr.max()) / max(self.temperature, 1e-6))
+        std = arr.std()
+        z = (arr - arr.mean()) / std if std > 1e-9 else arr - arr.mean()
+        # Tiered de-weighting: shave the score by strike_penalty for each strike
+        # already on the agent's record, so weight erodes as an agent keeps
+        # underperforming rather than staying full until the hard-fire trigger.
+        if self.strike_penalty:
+            z = z - self.strike_penalty * np.array(
+                [self._strikes.get(a, 0) for a in scores], dtype=float
+            )
+        expd = np.exp((z - z.max()) / max(self.temperature, 1e-6))
         soft = expd / expd.sum()
         weights = dict(zip(scores.keys(), soft))
 
@@ -112,7 +142,28 @@ class WeightManager:
         for agent in weights:
             weights[agent] = max(weights[agent], self.policy(agent).floor)
         total = sum(weights.values())
-        return {a: w / total for a, w in weights.items()}
+        return self._finalize({a: w / total for a, w in weights.items()})
+
+    def _finalize(self, target: dict[str, float]) -> dict[str, float]:
+        """EMA-smooth the new target against last rebalance's weights, then
+        renormalize. Reduces turnover from noisy week-to-week score swings while
+        still converging to the target if a tilt persists. Fired agents are
+        forced to zero so smoothing can't keep a benched agent alive."""
+        a = float(min(max(self.smoothing, 0.0), 1.0))
+        if a >= 1.0 or not self._prev_weights:
+            blended = dict(target)
+        else:
+            agents = set(target) | set(self._prev_weights)
+            blended = {
+                ag: a * target.get(ag, 0.0) + (1.0 - a) * self._prev_weights.get(ag, 0.0)
+                for ag in agents
+            }
+        for ag in self._fired:
+            blended.pop(ag, None)
+        total = sum(blended.values())
+        blended = {ag: w / total for ag, w in blended.items()} if total > 0 else {}
+        self._prev_weights = dict(blended)
+        return blended
 
     @property
     def fired(self) -> set[str]:
