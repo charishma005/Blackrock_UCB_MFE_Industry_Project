@@ -1,0 +1,63 @@
+# Persona TEMPLATE — copy to <driver>.yaml and fill in. An analyst is fully
+# described by this file; adding one is configuration, not code.
+#
+# A persona has four blocks:
+#   display_name  one line naming the driver, shown at the top of the system prompt
+#   horizon       the single prediction horizon + the clock it is graded on
+#   mandate       what the analyst is asked to judge (prompted; the "knowledge" half)
+#   features      what it is permitted to MEASURE — never a signal, never a direction
+#   text_cues     which policy-language sentences reach it (partitioned by driver)
+#
+# Design invariants, enforced structurally:
+#   * Features are measurements only. Every op in features/ops.py maps series → series
+#     with no fitting, no full-sample standardization, no directional scoring, so a
+#     spec CANNOT express a forecast. A feature named like `<driver>_signal` would be
+#     smuggling the answer into the prompt.
+#   * `descriptions` are construction-only — what the number IS and how it is computed,
+#     never what it implies. Shown only in the --describe-features arm.
+#   * Direction is graded against `level_feature`: the system prompt asks whether that
+#     measurement will be HIGHER ('up') or LOWER ('down') at the horizon. Make the
+#     mandate's up/down agree with the level_feature's move, or scoring inverts.
+
+display_name: "<driver> (what it is, in plain words)"
+
+horizon:
+  # kind: next_release   → graded at the target series' next release (monthly data).
+  # kind: fixed          → for a DAILY market series; set clock_freq to resample the
+  #                        clock so the horizon is non-overlapping (else the t-stat lies).
+  kind: next_release            # or: fixed
+  clock: <SERIES_ID>            # the raw series whose release dates are the clock
+  clock_freq: null              # e.g. "ME" (month end) for a daily/weekly market series
+  label: "the next <...> (roughly one month ahead)"   # what the analyst is told
+  approx_days: 31               # only populates the DriverView contract's day count
+
+mandate:
+  - "Judge whether <driver> is <rising/falling>, and how strongly."
+  - "The graded measurement is <level_feature>: 'up' means it RISES."   # keep this honest
+  - "Weigh <the level relative to some stated anchor> and <the recent direction>."
+  - "Do not reason about <other drivers> or any trade — only <driver>."
+
+features:
+  level_feature: <name of the feature that is this driver's headline level>
+
+  # Trajectory features — the analyst sees the path, `history` points, oldest → newest.
+  series:
+    - {name: <name>, source: <SERIES_ID>, op: level, unit: "<unit>", history: 13,
+       description: "What this number is and how it is computed. Construction only."}
+
+  # Derived readings — one number as of now. `@name` references an earlier feature.
+  # windows are in the SOURCE series' own observations (months for monthly data,
+  # trading days for a daily series, weeks for a weekly one).
+  scalars:
+    - {name: <name>_change_3m, source: "@<name>", op: diff, window: 3, unit: "<unit>",
+       description: "<name> minus its value 3 observations ago."}
+    # ops (features/ops.py): level, diff(window), pct_change(window), yoy(periods),
+    #   pct_change_annualized(window, periods_per_year), moving_average(window),
+    #   spread(a,b), ratio(a,b), lag(periods), distance_from_reference(reference),
+    #   rolling_min(window), rolling_max(window). spread/ratio take `sources: [a, b]`.
+
+# Sentences containing any cue are routed to this analyst (boundary-aware match).
+# Keep them to THIS driver's vocabulary — the partition is what buys analyst
+# independence. Multi-word cues match as phrases.
+text_cues:
+  - "<a word or phrase specific to this driver>"

@@ -63,3 +63,17 @@ class FomcCorpus:
             return None
         text = self._texts[i]
         return text[: self.max_chars] if self.max_chars else text
+
+    def pair_as_of(self, asof) -> tuple[str | None, str | None]:
+        """``(current, previous)`` documents available as of ``asof``.
+
+        Consecutive statements are ~0.80 similar — the language is heavily
+        templated, so the information sits in what *changed*, not in the document.
+        Serving the predecessor alongside the current one is what lets a selector
+        show an analyst the edit rather than 400 words of recurring boilerplate.
+        """
+        i = bisect.bisect_right(self._release_dates, pd.Timestamp(asof)) - 1
+        if i < 0:
+            return None, None
+        cut = (lambda t: t[: self.max_chars]) if self.max_chars else (lambda t: t)
+        return cut(self._texts[i]), (cut(self._texts[i - 1]) if i >= 1 else None)

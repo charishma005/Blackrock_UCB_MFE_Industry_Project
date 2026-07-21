@@ -1,0 +1,344 @@
+<title>AI Hedge Fund — Layered Agent Architecture</title>
+<style>
+  :root {
+    --paper:   #F7F7F6;
+    --card:    #FFFFFF;
+    --sunk:    #ECEDEC;
+    --ink:     #14161A;
+    --ink-2:   #4A5058;
+    --muted:   #7C838C;
+    --rule:    #D8DAD9;
+
+    --feat:    #0E7480;   /* preprocessing — the new layer */
+    --feat-bg: #E0F0F2;
+    --anlz:    #2B5DD1;   /* analysts */
+    --anlz-bg: #E3EAFA;
+    --pm:      #C85A22;   /* PM pods */
+    --pm-bg:   #FAE9DE;
+    --mech:    #1D7443;   /* deterministic */
+    --mech-bg: #DFF0E5;
+    --warn:    #B3261E;
+    --warn-bg: #F9E5E3;
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0E1013; --card: #171A1F; --sunk: #1F242B;
+      --ink: #E7E9EC; --ink-2: #B3B9C2; --muted: #828A95; --rule: #2A3039;
+      --feat: #46C2CF; --feat-bg: #0D2E33;
+      --anlz: #7AA2FF; --anlz-bg: #16223D;
+      --pm:   #F0906050; --pm: #EE9463; --pm-bg: #33200F;
+      --mech: #55C787; --mech-bg: #102E1D;
+      --warn: #FF7A6B; --warn-bg: #331815;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0E1013; --card: #171A1F; --sunk: #1F242B;
+    --ink: #E7E9EC; --ink-2: #B3B9C2; --muted: #828A95; --rule: #2A3039;
+    --feat: #46C2CF; --feat-bg: #0D2E33;
+    --anlz: #7AA2FF; --anlz-bg: #16223D;
+    --pm: #EE9463; --pm-bg: #33200F;
+    --mech: #55C787; --mech-bg: #102E1D;
+    --warn: #FF7A6B; --warn-bg: #331815;
+  }
+  :root[data-theme="light"] {
+    --paper: #F7F7F6; --card: #FFFFFF; --sunk: #ECEDEC;
+    --ink: #14161A; --ink-2: #4A5058; --muted: #7C838C; --rule: #D8DAD9;
+    --feat: #0E7480; --feat-bg: #E0F0F2;
+    --anlz: #2B5DD1; --anlz-bg: #E3EAFA;
+    --pm: #C85A22; --pm-bg: #FAE9DE;
+    --mech: #1D7443; --mech-bg: #DFF0E5;
+    --warn: #B3261E; --warn-bg: #F9E5E3;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.5; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+
+  h1 {
+    font-family: var(--mono); font-size: clamp(1.35rem, 3.2vw, 2rem); font-weight: 700;
+    letter-spacing: -0.02em; margin: 0 0 0.35rem; text-wrap: balance;
+  }
+  .sub { color: var(--ink-2); font-size: 0.95rem; margin: 0 0 0.6rem; }
+  .stamp {
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  header.top { border-bottom: 2px solid var(--ink); padding-bottom: 1rem; margin-bottom: 1.75rem; }
+
+  /* ---- bands ---- */
+  .band { background: var(--card); border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.1rem 1.15rem; }
+  .band > h2 {
+    font-family: var(--mono); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; margin: 0 0 0.15rem;
+  }
+  .band > .note { font-size: 0.83rem; color: var(--muted); margin: 0 0 0.85rem; }
+  .band.feat { border-left: 4px solid var(--feat); } .band.feat > h2 { color: var(--feat); }
+  .band.anlz { border-left: 4px solid var(--anlz); } .band.anlz > h2 { color: var(--anlz); }
+  .band.pm   { border-left: 4px solid var(--pm);   } .band.pm   > h2 { color: var(--pm); }
+  .band.mech { border-left: 4px solid var(--mech); } .band.mech > h2 { color: var(--mech); }
+  .band.src  { border-left: 4px solid var(--muted);} .band.src  > h2 { color: var(--ink-2); }
+
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .arrow {
+    font-family: var(--mono); color: var(--muted); text-align: center;
+    font-size: 1rem; line-height: 1; padding: 0.5rem 0;
+  }
+
+  /* ---- generic chip rows ---- */
+  .chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+  .chip {
+    font-family: var(--mono); font-size: 0.72rem; padding: 0.3rem 0.55rem;
+    border: 1px solid var(--rule); border-radius: 4px; background: var(--sunk); color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .chip.built { background: var(--card); border-color: var(--rule); color: var(--ink); }
+  .chip.planned { border-style: dashed; color: var(--muted); background: transparent; }
+
+  /* ---- the two-channel preprocessing panel ---- */
+  .channels { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+  @media (max-width: 760px) { .channels { grid-template-columns: 1fr; } }
+  .channel { background: var(--feat-bg); border: 1px solid var(--rule); border-radius: 5px; padding: 0.8rem 0.9rem; }
+  .channel h3 {
+    font-family: var(--mono); font-size: 0.76rem; font-weight: 700; margin: 0 0 0.3rem; color: var(--feat);
+    letter-spacing: -0.005em;
+  }
+  .channel p { margin: 0 0 0.45rem; font-size: 0.85rem; color: var(--ink-2); }
+  .channel ul { margin: 0; padding-left: 1.05rem; font-size: 0.82rem; color: var(--ink-2); }
+  .channel li { margin-bottom: 0.12rem; }
+  .rule-line {
+    font-family: var(--mono); font-size: 0.74rem; margin-top: 0.55rem; padding-top: 0.5rem;
+    border-top: 1px dashed var(--rule); color: var(--feat); font-weight: 700;
+  }
+
+  /* ---- analyst grid ---- */
+  .analysts { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 0.6rem; }
+  .agent {
+    background: var(--anlz-bg); border: 1px solid var(--rule);
+    border-top: 3px solid var(--anlz); border-radius: 5px; padding: 0.6rem 0.7rem;
+  }
+  .agent .name { font-family: var(--mono); font-size: 0.82rem; font-weight: 700; }
+  .agent .meta { font-family: var(--mono); font-size: 0.66rem; color: var(--ink-2); margin-top: 0.28rem; line-height: 1.45; }
+  .agent .meta b { color: var(--anlz); font-weight: 700; }
+  .agent.orphan { border-top-color: var(--warn); opacity: 0.82; }
+  .flag {
+    display: inline-block; font-family: var(--mono); font-size: 0.6rem; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; padding: 0.1rem 0.32rem;
+    border-radius: 3px; background: var(--warn-bg); color: var(--warn); margin-top: 0.35rem;
+  }
+
+  /* ---- PM pods ---- */
+  .pods { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.6rem; }
+  .pod {
+    background: var(--pm-bg); border: 1px solid var(--rule); border-left: 3px solid var(--pm);
+    border-radius: 5px; padding: 0.65rem 0.75rem;
+  }
+  .pod .name { font-family: var(--mono); font-size: 0.8rem; font-weight: 700; }
+  .pod .meta { font-size: 0.78rem; color: var(--ink-2); margin-top: 0.2rem; }
+  .pod.planned { background: transparent; border-left-style: dashed; opacity: 0.72; }
+
+  /* ---- deterministic tail ---- */
+  .tail { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.6rem; }
+  .step {
+    background: var(--mech-bg); border: 1px solid var(--rule); border-left: 3px solid var(--mech);
+    border-radius: 5px; padding: 0.65rem 0.75rem;
+  }
+  .step .name { font-family: var(--mono); font-size: 0.8rem; font-weight: 700; }
+  .step .meta { font-size: 0.78rem; color: var(--ink-2); margin-top: 0.2rem; }
+
+  /* ---- contract ribbon ---- */
+  .ribbon {
+    font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
+    text-align: center; padding: 0.3rem 0;
+  }
+  .ribbon b { color: var(--ink-2); }
+
+  /* ---- footnotes ---- */
+  .notes { margin-top: 2.25rem; border-top: 1px solid var(--rule); padding-top: 1.1rem; }
+  .notes ol { margin: 0; padding-left: 1.5rem; }
+  .notes li { font-size: 0.86rem; color: var(--ink-2); margin-bottom: 0.55rem; }
+  .notes li b { color: var(--ink); font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.02em; }
+  code {
+    font-family: var(--mono); font-size: 0.85em; background: var(--sunk);
+    padding: 0.08em 0.32em; border-radius: 3px;
+  }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.1rem;
+    font-family: var(--mono); font-size: 0.68rem; color: var(--muted);
+  }
+  .legend span::before {
+    content: ""; display: inline-block; width: 0.7rem; height: 0.7rem;
+    border-radius: 2px; margin-right: 0.35rem; vertical-align: -0.05rem;
+    border: 1px solid var(--rule);
+  }
+  .legend .k-built::before   { background: var(--anlz); }
+  .legend .k-planned::before { background: transparent; border-style: dashed; }
+  .legend .k-orphan::before  { background: var(--warn); }
+  :focus-visible { outline: 2px solid var(--anlz); outline-offset: 2px; }
+</style>
+
+<div class="sheet">
+
+  <header class="top">
+    <h1>AI HEDGE FUND — LAYERED AGENT ARCHITECTURE</h1>
+    <p class="sub">Measurements are computed · judgment is the model's · the book is deterministic</p>
+    <div class="stamp">Revised 2026-07-18 · analyst layer redesigned, not yet built · source: <code>slides/architecture.html</code></div>
+  </header>
+
+  <div class="flow">
+
+    <!-- 1 · sources -->
+    <div class="band src">
+      <h2>Raw sources</h2>
+      <p class="note">Point-in-time by construction — FRED series shifted to release date, FOMC documents keyed on <code>release_date</code>. Everything downstream reads through the <code>AsOf</code> gate.</p>
+      <div class="chips">
+        <span class="chip built">FRED · CPIAUCSL</span>
+        <span class="chip built">UNRATE</span>
+        <span class="chip built">WALCL</span>
+        <span class="chip built">DGS2 · DGS10</span>
+        <span class="chip built">T10YIE</span>
+        <span class="chip built">NFCI</span>
+        <span class="chip built">FOMC statements + minutes · 343 docs, 2005–2026</span>
+        <span class="chip planned">GICS sector prices</span>
+        <span class="chip planned">VIX + realized vol</span>
+        <span class="chip planned">CFTC positioning</span>
+        <span class="chip planned">Cu/Au · DXY</span>
+        <span class="chip planned">news archetypes</span>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- 2 · the change -->
+    <div class="band feat">
+      <h2>Preprocessing — two channels per driver</h2>
+      <p class="note">The layer that changed. Each analyst receives these two channels about its own driver and nothing else.</p>
+      <div class="channels">
+        <div class="channel">
+          <h3>Engineered features — the "what"</h3>
+          <p>Deterministic measurements computed from the raw series, like the metrics an economist chooses to put on their dashboard.</p>
+          <ul>
+            <li>levels, changes, YoY / QoQ</li>
+            <li>moving averages, spreads</li>
+            <li>distance from a reference (target, neutral)</li>
+          </ul>
+          <div class="rule-line">No score · no direction · no signal</div>
+        </div>
+        <div class="channel">
+          <h3>Driver-specific text — the "why"</h3>
+          <p>The context behind those measurements: why the driver moved and what the people who move it are saying about it.</p>
+          <ul>
+            <li>passages bearing on this driver only</li>
+            <li>change vs the previous document</li>
+            <li>partitioned, never the shared full document</li>
+          </ul>
+          <div class="rule-line">Preprocessing rule — open, team assessing</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- 3 · analysts -->
+    <div class="band anlz">
+      <h2>Analyst agents — LLM · one driver each · write a report</h2>
+      <p class="note">The specialist forms the judgment. It reads only its own two channels, never another analyst's evidence and never a trade.</p>
+      <div class="analysts">
+        <div class="agent">
+          <div class="name">inflation</div>
+          <div class="meta"><b>feat</b> CPIAUCSL<br><b>text</b> inflation passages</div>
+        </div>
+        <div class="agent">
+          <div class="name">labor_tightness</div>
+          <div class="meta"><b>feat</b> UNRATE<br><b>text</b> employment passages</div>
+        </div>
+        <div class="agent">
+          <div class="name">balance_sheet</div>
+          <div class="meta"><b>feat</b> WALCL<br><b>text</b> holdings / runoff passages</div>
+        </div>
+        <div class="agent">
+          <div class="name">term_premium</div>
+          <div class="meta"><b>feat</b> DGS10<br><b>text</b> long-end / supply passages</div>
+        </div>
+        <div class="agent orphan">
+          <div class="name">curve_slope</div>
+          <div class="meta"><b>feat</b> DGS2 · DGS10<br><b>text</b> policy-path passages</div>
+          <span class="flag">no PM listens</span>
+        </div>
+        <div class="agent orphan">
+          <div class="name">inflation_expectations</div>
+          <div class="meta"><b>feat</b> T10YIE<br><b>text</b> expectations passages</div>
+          <span class="flag">no PM listens</span>
+        </div>
+        <div class="agent orphan">
+          <div class="name">financial_conditions</div>
+          <div class="meta"><b>feat</b> NFCI<br><b>text</b> conditions passages</div>
+          <span class="flag">no PM listens</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ribbon">↓ &nbsp; contract: <b>the report</b> &nbsp;·&nbsp; structured header (<b>direction · conviction · level</b>) retained for scoring and audit, not for PM arithmetic &nbsp; ↓</div>
+
+    <!-- 4 · PMs -->
+    <div class="band pm">
+      <h2>PM pods — LLM · read the reports · express one trade</h2>
+      <p class="note">A PM holds the model the analysts do not: how drivers propagate to instruments. It arbitrates the reports it listens to and expresses one relative-value trade.</p>
+      <div class="pods">
+        <div class="pod">
+          <div class="name">Macro Rates PM</div>
+          <div class="meta">4 analysts → DV01-neutral 2s10s flattener / steepener</div>
+        </div>
+        <div class="pod planned">
+          <div class="name">Long/Short Equity PM</div>
+          <div class="meta">planned — activates cross-strategy diversification</div>
+        </div>
+        <div class="pod planned">
+          <div class="name">Credit Basis PM</div>
+          <div class="meta">planned</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- 5 · deterministic tail -->
+    <div class="band mech">
+      <h2>Mechanical layer — no LLM</h2>
+      <p class="note">Every model output is re-clipped here. Risk math never lives inside a prompt.</p>
+      <div class="tail">
+        <div class="step">
+          <div class="name">Ensemble</div>
+          <div class="meta">correlation-aware weights · risk budgets · attribution ledger</div>
+        </div>
+        <div class="step">
+          <div class="name">Risk layer</div>
+          <div class="meta">vol target · leverage and per-name caps · re-clips any LLM output</div>
+        </div>
+        <div class="step">
+          <div class="name">Portfolio</div>
+          <div class="meta">netted book + forward OOS record; capital and constraints flow back down</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <span class="k-built">built</span>
+    <span class="k-planned">planned / not implemented</span>
+    <span class="k-orphan">built but unconsumed</span>
+  </div>
+
+  <div class="notes">
+    <ol>
+      <li><b>PARTITION THE DATA.</b> A shared document collapses analyst independence: feeding every analyst the same FOMC statement moved average pairwise correlation from <code>0.221</code> to <code>0.339</code> and drove faithfulness negative for inflation (<code>−0.171</code>) and term premium (<code>−0.050</code>) — those analysts tracked other drivers more than their own. Both channels are partitioned for this reason.</li>
+      <li><b>FEED EVIDENCE, NEVER THE ANSWER.</b> The superseded design put the finished <code>DriverView</code> — direction and conviction included — inside the prompt and asked the model to refine it. Agreement with the formula ran <code>own_corr 0.965</code>; "the LLM added nothing" was the prompt's doing. A feature named like <code>inflation_momentum_signal</code> would reintroduce exactly this.</li>
+      <li><b>GAUGE THE LEAK.</b> Richer inputs make date-blinding harder, not easier — a CPI YoY print identifies its quarter with or without a date stamp. Date-blind prompting plus a post-cutoff control window are both required; the 2019–2024 window sits entirely pre-cutoff, so the current leak test is inconclusive by construction.</li>
+      <li><b>LLMs REASON, FORMULAS SIZE.</b> Analysts and PMs are both LLMs, so view convergence can now occur at either layer and needs a gauge at both. Sizing, netting, and risk stay deterministic and re-clip everything above them.</li>
+    </ol>
+  </div>
+
+</div>

@@ -1,7 +1,62 @@
-# Analyst mandate spec — long-end term-premium driver (the 10y point).
-display_name: "long-end term premium (10-year rate)"
+# Analyst spec — long-end term-premium driver (the 10-year Treasury yield, a proxy).
+#
+# The model-free ACM/Kim-Wright term-premium series is not vendored here, so the
+# graded measurement is the 10-year Treasury YIELD itself, read as a proxy for the
+# premium embedded in the long end. A market driver: the yield updates daily, so the
+# clock is resampled to month-end (clock_freq: ME) and feature windows are in TRADING
+# DAYS (21 ≈ 1 month, 63 ≈ 3 months, 252 ≈ 1 year). See _TEMPLATE.yaml for the fields.
+
+display_name: "long-end term premium (10-year Treasury yield, a proxy)"
+
+horizon:
+  kind: fixed
+  clock: DGS10
+  clock_freq: ME
+  label: "month end, roughly one month ahead"
+  approx_days: 31
+
 mandate:
-  - "Judge whether the term premium embedded in the long end is rising or falling."
-  - "Rising long-end yields / supply pressure = direction up; falling = down."
-  - "Issuance and balance-sheet runoff push the premium up; flight-to-quality pushes it down."
-  - "Do not reason about the front end, policy path, or any trade — only the long-end premium."
+  - "Judge whether the term premium in the long end is rising or falling, and how strongly."
+  - "The graded measurement is the 10-year Treasury yield: rising ('up') is a rising premium, falling is down."
+  - "Weigh the level, the recent direction, where the yield sits in its 12-month range, and the 10s30s slope."
+  - "Issuance and balance-sheet runoff tend to lift the long end; flight-to-quality lowers it."
+  - "Do not reason about the front end, the policy path, inflation, or any trade — only the long-end premium."
+
+features:
+  level_feature: dgs10_level
+
+  series:
+    - {name: dgs10_level, source: DGS10, op: level, unit: "%", history: 10,
+       description: "The 10-year Treasury constant-maturity yield, in percent."}
+
+  scalars:
+    - {name: dgs10_change_21d, source: "@dgs10_level", op: diff, window: 21, unit: "pp",
+       description: "dgs10_level minus its value 21 trading days ago, in percentage points."}
+    - {name: dgs10_change_63d, source: "@dgs10_level", op: diff, window: 63, unit: "pp",
+       description: "dgs10_level minus its value 63 trading days ago, in percentage points."}
+    - {name: dgs10_change_252d, source: "@dgs10_level", op: diff, window: 252, unit: "pp",
+       description: "dgs10_level minus its value 252 trading days ago, in percentage points."}
+    - {name: dgs10_12m_low, source: "@dgs10_level", op: rolling_min, window: 252, unit: "%",
+       description: "The lowest dgs10_level over the trailing 252 trading days."}
+    - {name: dgs10_12m_high, source: "@dgs10_level", op: rolling_max, window: 252, unit: "%",
+       description: "The highest dgs10_level over the trailing 252 trading days."}
+    - {name: dgs10_above_12m_low, sources: ["@dgs10_level", "@dgs10_12m_low"], op: spread, unit: "pp",
+       description: "dgs10_level minus dgs10_12m_low, in percentage points."}
+    - {name: dgs10_range_width, sources: ["@dgs10_12m_high", "@dgs10_12m_low"], op: spread, unit: "pp",
+       description: "dgs10_12m_high minus dgs10_12m_low, in percentage points."}
+    - {name: dgs10_range_position, sources: ["@dgs10_above_12m_low", "@dgs10_range_width"], op: ratio, unit: "0-1",
+       description: "dgs10_above_12m_low divided by dgs10_range_width; 0 at the trailing-12-month low, 1 at the high."}
+    - {name: slope_30s10s, sources: [DGS30, DGS10], op: spread, unit: "pp",
+       description: "The 30-year Treasury yield minus the 10-year Treasury yield, in percentage points."}
+    - {name: slope_10s2s, sources: [DGS10, DGS2], op: spread, unit: "pp",
+       description: "The 10-year Treasury yield minus the 2-year Treasury yield, in percentage points."}
+
+text_cues:
+  - "longer-term"
+  - "long-term"
+  - "Treasury securities"
+  - "securities holdings"
+  - "term premium"
+  - issuance
+  - supply
+  - duration

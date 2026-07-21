@@ -1,7 +1,69 @@
-# Analyst mandate spec — labor-market tightness driver.
-display_name: "labor-market tightness (unemployment)"
+# Analyst spec — labor-market tightness driver (the unemployment rate).
+#
+# Three blocks, and the split between them is the design:
+#   mandate     what this analyst is asked to judge   (prompted)
+#   features    what it is permitted to measure       (computed, never a signal)
+#   text_cues   which policy language reaches it      (partitioned, never the whole doc)
+#
+# The graded measurement is the unemployment rate: a call of "up" means the rate
+# RISES, i.e. the labour market LOOSENS. See _TEMPLATE.yaml for the field reference.
+
+display_name: "labor-market tightness (the unemployment rate)"
+
+horizon:
+  kind: next_release
+  clock: UNRATE
+  label: "the next monthly jobs report (roughly one month ahead)"
+  approx_days: 31
+
 mandate:
   - "Judge whether the labor market is tightening or loosening, and how strongly."
-  - "Falling unemployment = tightening (direction up); rising unemployment = loosening (down)."
-  - "Respect the Sahm-rule spirit: a rise well off the 12-month low is a strong loosening signal."
-  - "Do not reason about inflation, policy, or any trade — only labor tightness."
+  - "The graded measurement is the unemployment rate: a rising rate ('up') is a loosening market."
+  - "Weigh both the level relative to a longer-run natural rate near 4% and the recent direction."
+  - "A rapid rise well off the trailing 12-month low is a stronger signal than the level alone (the Sahm-rule spirit)."
+  - "Do not reason about inflation, interest rates, growth, or any trade — only the labor market."
+
+features:
+  level_feature: unemployment_rate
+
+  series:
+    - {name: unemployment_rate, source: UNRATE, op: level, unit: "%", history: 13,
+       description: "The civilian unemployment rate (U-3), in percent."}
+
+  scalars:
+    - {name: unrate_change_3m, source: "@unemployment_rate", op: diff, window: 3, unit: "pp",
+       description: "unemployment_rate minus its value 3 months ago, in percentage points."}
+    - {name: unrate_change_6m, source: "@unemployment_rate", op: diff, window: 6, unit: "pp",
+       description: "unemployment_rate minus its value 6 months ago, in percentage points."}
+    - {name: unrate_change_12m, source: "@unemployment_rate", op: diff, window: 12, unit: "pp",
+       description: "unemployment_rate minus its value 12 months ago, in percentage points."}
+    - {name: unrate_3m_avg, source: "@unemployment_rate", op: moving_average, window: 3, unit: "%",
+       description: "The average unemployment_rate over the last 3 months."}
+    - {name: unrate_12m_low, source: "@unemployment_rate", op: rolling_min, window: 12, unit: "%",
+       description: "The lowest unemployment_rate over the trailing 12 months."}
+    - {name: unrate_12m_high, source: "@unemployment_rate", op: rolling_max, window: 12, unit: "%",
+       description: "The highest unemployment_rate over the trailing 12 months."}
+    - {name: sahm_gap, sources: ["@unrate_3m_avg", "@unrate_12m_low"], op: spread, unit: "pp",
+       description: "unrate_3m_avg minus unrate_12m_low, in percentage points."}
+    - {name: unrate_range_width, sources: ["@unrate_12m_high", "@unrate_12m_low"], op: spread, unit: "pp",
+       description: "unrate_12m_high minus unrate_12m_low, in percentage points."}
+    - {name: unrate_above_12m_low, sources: ["@unemployment_rate", "@unrate_12m_low"], op: spread, unit: "pp",
+       description: "unemployment_rate minus unrate_12m_low, in percentage points."}
+    - {name: unrate_range_position, sources: ["@unrate_above_12m_low", "@unrate_range_width"], op: ratio, unit: "0-1",
+       description: "unrate_above_12m_low divided by unrate_range_width; 0 at the trailing-12-month low, 1 at the high."}
+    - {name: unrate_distance_from_natural, source: "@unemployment_rate", op: distance_from_reference,
+       reference: 4.0, unit: "pp",
+       description: "unemployment_rate minus 4.0, in percentage points."}
+
+# Sentences mentioning any cue are routed to this analyst.
+text_cues:
+  - labor
+  - employment
+  - unemployment
+  - job
+  - jobs
+  - payroll
+  - payrolls
+  - wage
+  - wages
+  - hiring

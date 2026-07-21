@@ -1,5 +1,13 @@
 """The layer interfaces — stable, well-defined contracts between layers.
 
+**This file is the merge seam.** This repo owns the upstream — data feeds →
+analyst agents → report — and hands off at ``DriverView``. The downstream PM,
+ensemble, and risk layers are built by other teammates; they consume
+``DriverView`` and implement against ``StrategyTrade`` / ``FundAllocation``. Those
+two are kept here, unused upstream, precisely so the people building the layers
+above have a typed boundary to write to. Change these shapes only by agreement —
+every layer depends on them.
+
 The thesis is explicit that the commitment "at this stage is not the mechanism
 of any interface but the discipline that each layer communicates through a
 clean, well-defined contract rather than reaching into another layer's
@@ -10,7 +18,7 @@ choices, exactly as the thesis intends.
 
 Three contracts, one per interface in the meeting:
 
-    DriverView       analyst  → PM     "here is my expert claim about one driver"
+    DriverView       analyst  → PM     "here is my expert claim about one driver"  ← WE PRODUCE THIS
     StrategyTrade    PM       → fund   "here is the one trade + the risk it carries"
     FundAllocation   fund     → PM     "here is your capital and your constraints"
 
@@ -53,12 +61,119 @@ class DriverView(BaseModel):
     reasoning: str = ""
     level: Optional[float] = None                # current measured level, for scoring
 
+    # ── report-era fields ───────────────────────────────────────────────────
+    # An analyst now writes a *report*, and (because PMs are LLMs too) the report
+    # is what crosses the layer boundary. The fields above survive as the
+    # machine-readable header the graders use, not as PM arithmetic. All optional,
+    # so every pre-existing caller is unaffected.
+    report: str = ""
+    key_evidence: list[str] = Field(default_factory=list)  # feature names leaned on
+    falsifier: str = ""                          # what would change this view
+    source: str = ""                             # "llm:inflation", "benchmark:persistence"
+    degraded: bool = False                       # emitted after a failure — exclude from grading
+    # Re-emitted unchanged because no evidence moved since the previous meeting. Not
+    # an independent observation: counting carried views as fresh ones is what makes
+    # a monthly driver look like it produced 52 opinions a year.
+    carried: bool = False
+
     model_config = {"arbitrary_types_allowed": True}
 
     @property
     def signed_conviction(self) -> float:
         """Direction folded into conviction: +conv up, -conv down, 0 flat."""
         return {"up": 1.0, "down": -1.0, "flat": 0.0}[self.direction] * self.conviction
+
+
+class SeriesFeature(BaseModel):
+    """One measured quantity, as a short trajectory the analyst can read."""
+
+    name: str
+    values: list[float]                          # oldest → newest
+    unit: str = ""
+    description: str = ""                        # construction only; shown in describe mode
+
+
+class ScalarFeature(BaseModel):
+    """One measured quantity, as of now."""
+
+    name: str
+    value: float
+    unit: str = ""
+    description: str = ""                        # construction only; shown in describe mode
+
+
+class FeatureSet(BaseModel):
+    """Everything measurable an analyst is allowed to see about its driver.
+
+    The input contract for the analyst layer, and deliberately a *measurement*
+    object: levels, changes, moving averages, spreads. No score, no direction, no
+    signal — every act of judgment belongs to the model that reads this.
+
+    It is also what makes a benchmark comparable. Anything grading against an
+    analyst consumes the same ``FeatureSet``, so "did it see more data?" stops
+    being a question of discipline and becomes a property of the type.
+    """
+
+    driver: str
+    asof: pd.Timestamp
+    series: list[SeriesFeature] = Field(default_factory=list)
+    scalars: list[ScalarFeature] = Field(default_factory=list)
+    level_feature: Optional[str] = None          # which feature is the driver's level
+    sources_read: list[str] = Field(default_factory=list)   # raw series touched (audit)
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    @property
+    def names(self) -> set[str]:
+        return {f.name for f in self.series} | {f.name for f in self.scalars}
+
+    @property
+    def level(self) -> Optional[float]:
+        """The driver's headline measurement — what scoring grades against."""
+        if self.level_feature is None:
+            return None
+        for f in self.series:
+            if f.name == self.level_feature:
+                return f.values[-1] if f.values else None
+        for f in self.scalars:
+            if f.name == self.level_feature:
+                return f.value
+        return None
+
+    def render(self, describe: bool = False) -> str:
+        """The measurement block as the analyst sees it — relative time only.
+
+        No absolute dates anywhere: a date is the single token that most helps a
+        model recall the period instead of reading the evidence.
+
+        ``describe`` adds each feature's construction note (what it IS, never what
+        it implies). Off by default so the un-described arm reproduces exactly.
+        """
+        lines: list[str] = []
+        for f in self.series:
+            n = len(f.values)
+            unit = f" ({f.unit})" if f.unit else ""
+            lines.append(f"{f.name}{unit} — last {n} observations, oldest → newest")
+            if describe and f.description:
+                lines.append(f"    = {f.description}")
+            lines.append("  " + ", ".join(f"{v:.2f}" for v in f.values))
+        if self.scalars:
+            if lines:
+                lines.append("")
+            lines.append("Derived measurements")
+            if describe and any(f.description for f in self.scalars):
+                # per-line block — the aligned column can't carry a description
+                for f in self.scalars:
+                    unit = f" {f.unit}" if f.unit else ""
+                    lines.append(f"  {f.name}  {f.value:+.2f}{unit}")
+                    if f.description:
+                        lines.append(f"    = {f.description}")
+            else:
+                width = max(len(f.name) for f in self.scalars)
+                for f in self.scalars:
+                    unit = f" {f.unit}" if f.unit else ""
+                    lines.append(f"  {f.name.ljust(width)}  {f.value:+.2f}{unit}")
+        return "\n".join(lines)
 
 
 class ArbitratedView(BaseModel):

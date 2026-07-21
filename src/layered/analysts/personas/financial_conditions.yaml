@@ -1,7 +1,61 @@
-# Analyst mandate spec — financial conditions driver (NFCI).
+# Analyst spec — financial-conditions driver (Chicago Fed NFCI).
+#
+# Requires the NFCI series, which is not in the default vendored set — run
+# `python scripts/fetch_fred.py NFCI` (needs FRED_API_KEY) before this analyst can
+# run. NFCI is a published weekly index where 0 is the historical average, positive
+# is tighter-than-average and negative is looser. It is itself a measurement (not a
+# fitted signal of ours), so measuring its level, change and distance from zero is
+# legitimate. The clock is resampled to month-end; windows are in WEEKS.
+
 display_name: "financial conditions (Chicago Fed NFCI)"
+
+horizon:
+  kind: fixed
+  clock: NFCI
+  clock_freq: ME
+  label: "month end, roughly one month ahead"
+  approx_days: 31
+
 mandate:
-  - "Judge whether broad financial conditions are tightening or easing."
-  - "Tightening (NFCI rising above neutral) = direction up; easing = down."
-  - "Weigh both the momentum and how far conditions sit from neutral (zero)."
+  - "Judge whether broad financial conditions are tightening or easing, and how strongly."
+  - "The graded measurement is the NFCI index: rising ('up') is tightening, falling is easing."
+  - "Zero is the historical average; positive is tighter than average, negative is looser."
+  - "Weigh both the recent momentum and how far conditions sit from the zero average."
   - "Do not reason about specific rates, inflation, or any trade — only overall conditions."
+
+features:
+  level_feature: nfci
+
+  series:
+    - {name: nfci, source: NFCI, op: level, unit: "index", history: 13,
+       description: "The Chicago Fed National Financial Conditions Index; 0 is the historical average."}
+
+  scalars:
+    - {name: nfci_change_4w, source: "@nfci", op: diff, window: 4, unit: "index",
+       description: "nfci minus its value 4 weeks ago."}
+    - {name: nfci_change_13w, source: "@nfci", op: diff, window: 13, unit: "index",
+       description: "nfci minus its value 13 weeks ago."}
+    - {name: nfci_distance_from_zero, source: "@nfci", op: distance_from_reference, reference: 0.0, unit: "index",
+       description: "nfci minus 0.0."}
+    - {name: nfci_13w_avg, source: "@nfci", op: moving_average, window: 13, unit: "index",
+       description: "The average nfci over the last 13 weeks."}
+    - {name: nfci_52w_low, source: "@nfci", op: rolling_min, window: 52, unit: "index",
+       description: "The lowest nfci over the trailing 52 weeks."}
+    - {name: nfci_52w_high, source: "@nfci", op: rolling_max, window: 52, unit: "index",
+       description: "The highest nfci over the trailing 52 weeks."}
+    - {name: nfci_above_52w_low, sources: ["@nfci", "@nfci_52w_low"], op: spread, unit: "index",
+       description: "nfci minus nfci_52w_low."}
+    - {name: nfci_range_width, sources: ["@nfci_52w_high", "@nfci_52w_low"], op: spread, unit: "index",
+       description: "nfci_52w_high minus nfci_52w_low."}
+    - {name: nfci_range_position, sources: ["@nfci_above_52w_low", "@nfci_range_width"], op: ratio, unit: "0-1",
+       description: "nfci_above_52w_low divided by nfci_range_width; 0 at the trailing-52-week low, 1 at the high."}
+
+text_cues:
+  - "financial conditions"
+  - credit
+  - lending
+  - tighter
+  - tightening
+  - borrowing
+  - "financial markets"
+  - "financial developments"

@@ -1,31 +1,20 @@
-"""Layered agent fund — the analyst-PM meeting as a standing architecture.
+"""Layered agent fund — the analyst upstream (data → agent → report).
 
-This package implements the organizing principle set out in the project's
-"A Layered Agent Fund" thesis: a fund built as *layers of specialized agents*,
-each layer responsible for exactly one kind of work, interacting through the
-shape of a weekly analyst-PM meeting.
+This package builds the *analyst layer*: a population of isolated single-driver
+experts, each reading a partitioned slice of the data through the ``AsOf`` gate and
+writing a ``DriverView`` — a claim about ONE driver, in a form that can be compared,
+combined, and scored later.
 
-    analyst layer  →  portfolio-manager layer  →  unifying (risk/allocation) layer
-    (isolated          (arbitrate + express          (net exposures across
-     single-driver      views as one relative-        strategies, allocate
-     expertise)         value trade per strategy)     capital, feed back down)
-
-The three layers are separated by *stable contracts* (``contracts.py``) and
-nothing reaches into another layer's internals:
+``contracts.py`` holds the stable interfaces between layers, and is the seam the
+rest of the fund merges against:
 
     * analysts emit ``DriverView``      — a claim about ONE driver, scored later
     * a PM emits ``StrategyTrade``      — a relative-value trade + its risk
     * the fund emits ``FundAllocation`` — capital + constraints, fed back down
 
-The design deliberately mirrors, but does not replace, the flat persona
-ensemble in ``src/agents`` + ``src/ensemble``. That ensemble blends whole-
-investor opinions; this package instead separates *belief formation* (analysts)
-from *action selection* (PMs) from *survival* (the fund layer), so each can be
-built, scored, and improved on its own — which is the whole claim of the thesis.
-
-Everything here runs offline and deterministically with no API key: each
-analyst has a Phase-1 deterministic reading of its driver, and the LLM is an
-optional Phase-2 refinement (same pattern as ``src/agents/base.py``).
+Only ``DriverView`` is produced here; ``StrategyTrade`` and ``FundAllocation`` are
+the downstream (PM / unifying-layer) contracts, kept here so those teammates have a
+typed boundary to build against.
 """
 from __future__ import annotations
 

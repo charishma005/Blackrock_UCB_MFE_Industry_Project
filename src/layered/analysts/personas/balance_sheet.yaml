@@ -1,7 +1,58 @@
-# Analyst mandate spec — Fed balance-sheet driver.
-display_name: "the Fed's balance sheet (WALCL)"
+# Analyst spec — Fed balance-sheet driver (WALCL, total assets).
+#
+# Requires the WALCL series, which is not in the default vendored set — run
+# `python scripts/fetch_fred.py WALCL` (needs FRED_API_KEY) before this analyst can
+# run. WALCL is weekly (H.4.1, Wednesday-dated); the clock is resampled to month-end
+# (clock_freq: ME) so the call is the change over the next month. Feature windows are
+# in WEEKS (4 ≈ 1 month, 13 ≈ 1 quarter, 52 ≈ 1 year). See _TEMPLATE.yaml.
+
+display_name: "the Fed's balance sheet (total assets, WALCL)"
+
+horizon:
+  kind: fixed
+  clock: WALCL
+  clock_freq: ME
+  label: "month end, roughly one month ahead"
+  approx_days: 31
+
 mandate:
-  - "Judge whether the Fed's balance sheet is expanding (QE) or in runoff (QT), and the pace."
-  - "Expanding = direction up; runoff/QT = direction down."
-  - "Draining reserves tightens financial conditions and pressures term premium at the long end."
+  - "Judge whether the Fed's balance sheet is expanding (QE) or in runoff (QT), and at what pace."
+  - "The graded measurement is total assets: rising ('up') is expansion, falling is runoff."
+  - "Weigh the recent pace of change more than the level — runoff proceeds at an announced monthly cap."
+  - "Draining assets removes reserves; the statement's language on reinvestment and holdings is the 'why'."
   - "Do not reason about inflation, employment, or any trade — only the balance sheet."
+
+features:
+  level_feature: fed_assets
+
+  series:
+    - {name: fed_assets, source: WALCL, op: level, unit: "$M", history: 13,
+       description: "Total assets on the Federal Reserve balance sheet (H.4.1), in millions of dollars."}
+
+  scalars:
+    - {name: assets_change_4w, source: "@fed_assets", op: diff, window: 4, unit: "$M",
+       description: "fed_assets minus its value 4 weeks ago, in millions of dollars."}
+    - {name: assets_change_13w, source: "@fed_assets", op: diff, window: 13, unit: "$M",
+       description: "fed_assets minus its value 13 weeks ago, in millions of dollars."}
+    - {name: assets_change_52w, source: "@fed_assets", op: diff, window: 52, unit: "$M",
+       description: "fed_assets minus its value 52 weeks ago, in millions of dollars."}
+    - {name: assets_pct_change_13w, source: "@fed_assets", op: pct_change, window: 13, unit: "%",
+       description: "Percent change in fed_assets over the last 13 weeks."}
+    - {name: assets_13w_avg, source: "@fed_assets", op: moving_average, window: 13, unit: "$M",
+       description: "The average fed_assets over the last 13 weeks."}
+    - {name: assets_52w_high, source: "@fed_assets", op: rolling_max, window: 52, unit: "$M",
+       description: "The highest fed_assets over the trailing 52 weeks."}
+    - {name: assets_below_52w_high, sources: ["@fed_assets", "@assets_52w_high"], op: spread, unit: "$M",
+       description: "fed_assets minus assets_52w_high, in millions of dollars."}
+
+text_cues:
+  - "balance sheet"
+  - "securities holdings"
+  - runoff
+  - reinvest
+  - reinvestment
+  - "System Open Market Account"
+  - "agency"
+  - "mortgage-backed"
+  - "Treasury securities"
+  - holdings
