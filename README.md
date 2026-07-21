@@ -49,6 +49,7 @@ src/
     evaluation/  ic · panel · report_quality — grading + the leak gauge
   run_analyst.py · run_analyst_ic.py · run_feature_ic.py · compare_sweep.py
 data/fred/       vendored FRED CSVs — runs offline, no key
+data/fomc/       vendored FOMC corpus (documents.jsonl) — text channel, offline
 tests/           focused suite, no LLM calls
 scripts/         fetch_fred.py — add a FRED series (needs a key)
 ```
@@ -126,8 +127,9 @@ export FRED_API_KEY=...                     # free: fred.stlouisfed.org
 python3 scripts/fetch_fred.py WALCL NFCI T10YIE
 ```
 
-The FOMC statement corpus is read from the sibling `watching-crowding-build` repo (or
-`FOMC_DOCS_PATH`); only the text channel needs it.
+The FOMC statement/minutes corpus is vendored at `data/fomc/documents.jsonl` (343
+release-dated documents), so the text channel also runs offline. Override with
+`FOMC_DOCS_PATH` if it sits elsewhere.
 
 ## Tests
 

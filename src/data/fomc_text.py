@@ -8,9 +8,9 @@ statement (or minutes) *available as of* a given date, i.e. with
 seen. Statements release same-day; minutes ~3 weeks later; both are keyed off
 their own ``release_date``, so the as-of filter is correct for either.
 
-The processed corpus lives in the sibling ``watching-crowding-build`` repo
-(``FOMC/data/processed/documents.jsonl``); override the path with the
-``FOMC_DOCS_PATH`` env var if it sits elsewhere.
+The processed corpus is vendored in this repo at ``data/fomc/documents.jsonl``,
+so the text channel runs offline with no sibling checkout. Override the path with
+the ``FOMC_DOCS_PATH`` env var if it sits elsewhere.
 """
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ from pathlib import Path
 
 import pandas as pd
 
-# .../Blackrock_UCB_MFE_Industry_Project/src/data/fomc_text.py -> parents[3] == dev/
-_DEFAULT_PATH = (Path(__file__).resolve().parents[3]
-                 / "watching-crowding-build" / "FOMC" / "data" / "processed" / "documents.jsonl")
+# .../Blackrock_UCB_MFE_Industry_Project/src/data/fomc_text.py -> parents[2] == repo root
+_DEFAULT_PATH = (Path(__file__).resolve().parents[2]
+                 / "data" / "fomc" / "documents.jsonl")
 
 
 class FomcCorpus:
@@ -36,8 +36,8 @@ class FomcCorpus:
         p = Path(path or os.environ.get("FOMC_DOCS_PATH", _DEFAULT_PATH))
         if not p.exists():
             raise FileNotFoundError(
-                f"FOMC corpus not found at {p}. Point FOMC_DOCS_PATH at the processed "
-                f"documents.jsonl (statements+minutes) from the watching-crowding-build repo."
+                f"FOMC corpus not found at {p}. It ships vendored at "
+                f"data/fomc/documents.jsonl; set FOMC_DOCS_PATH to point elsewhere."
             )
         docs: list[tuple[pd.Timestamp, str]] = []
         for line in p.read_text().splitlines():
