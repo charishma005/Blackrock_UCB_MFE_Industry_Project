@@ -1,0 +1,110 @@
+# Experiments ledger — Blackrock_UCB_MFE_Industry_Project
+
+Fresh ledger, started 2026-07-22. Every experiment run from this repo is
+preregistered here BEFORE it runs (`/preregister`), executed and judged
+mechanically (`/experiment`), one verdict per commit. Prior rounds 1–8 live in
+`../macro-llm/EXPERIMENTS.md`; see this repo's HANDOFF.md for current state.
+
+House rules that bind every entry: cost estimate + explicit confirmation before
+uncached LLM spend; every call through the disk cache (reruns $0); excess
+returns in alpha regressions; report t-stats and n; no re-tuning after a locked
+rule fires; recall-aware design (date-blind unless leakage is the thing being
+measured).
+
+## Preregistered (pending)
+
+### fomc-recall-probe — preregistered 2026-07-22 at c8f9791
+
+**Question.** Does the existing FOMC text preprocessing (date scrubbing + cue
+partitioning, `src/layered/text/`) actually reduce the model's ability to
+recall *which meeting* a text context comes from? Recall-identifiability is
+the leak surface for any in-training-window text-channel result; this probe
+measures it directly instead of assuming preprocessing works.
+
+**Relation to Rejected Ideas.** "Anonymization as look-ahead control" (rejected
+in macro-llm) used anonymized text as a control arm in a signal experiment.
+This probe does NOT retry that: it measures identifiability of the preprocessed
+inputs themselves and produces no trading signal. It tests the premise, not the
+rejected design.
+
+**Design.** For each FOMC statement (n=172, 2005-02 to 2026-06) render the text
+exactly as an analyst would receive it, per arm, and ask the probe model —
+date-blind — to identify the meeting. Two arms:
+  - `whole`: `WholeDocumentSelector` rendering, 1 probe/meeting (n=172).
+  - `cue`: `CueSelector` rendering per macro driver (7 personas with real
+    cues), non-empty contexts only (n≈1,052 meeting×driver items).
+No entity-scrub arm in this run (it doesn't exist yet; building it is a
+follow-up experiment gated on this one's verdict).
+
+**Hypothesis** (falsifiable): date-scrubbed whole statements remain highly
+period-identifiable to the smart model, and cue partitioning reduces but does
+not eliminate identifiability — i.e. quarter-level accuracy: cue < whole, and
+whole ≥ 50%.
+
+**Primary metric.** Quarter-level top-1 identification accuracy per arm:
+model's guessed (year, month) mapped to calendar quarter == statement's
+release-date quarter. Equal weight per probe item. Pre-cutoff items only
+(release_date < 2026-02-01) define the primary numbers.
+
+**Secondary metrics** (cannot rescue the primary): year-level accuracy;
+exact-meeting (year+month) accuracy; per-driver cue-arm accuracy; post-cutoff
+anchor = accuracy on the ~4 statements after the model's Jan-2026 training
+cutoff (estimates the pure-inference floor — memorization impossible there).
+
+**Decision rules (locked).**
+1. Arm bands: RECALL-SATURATED if acc ≥ 50%; RECALL-RESISTANT if acc ≤ 10%;
+   else PARTIAL.
+2. Cue partitioning "materially reduces identifiability" iff
+   (whole_acc − cue_acc) ≥ 15pp AND cue_acc ≤ 0.5 × whole_acc.
+3. Kill criteria:
+   - If cue_acc > 25%: cue selection is NOT a recall defense. Consequence:
+     all in-window text-channel results remain recall-suspect regardless of
+     light preprocessing; no further scrub-style arms (entity/number masking)
+     may be claimed as recall fixes — only post-cutoff or forward designs
+     count as clean. Goes to Rejected Ideas as "light preprocessing as recall
+     defense".
+   - If whole_acc ≤ 10%: the recall concern for FOMC statements is
+     unsupported; drop the anti-recall motivation for preprocessing (the
+     partition then stands only on the independence/faithfulness grounds
+     already measured).
+
+**Robustness gate.** The decision-rule branch that fires must be unchanged:
+(a) in each subperiod 2005–2009 / 2010–2019 / 2020–2025; (b) under the
+year-level metric; (c) for the cue arm, under drop-one-driver (no single
+driver may flip the branch). Noise check: n=172 gives binomial SE ≤ 3.8pp at
+p=0.5, so the 15pp threshold clears noise by ~4×; cue-arm items cluster by
+meeting, so treat its effective n as ~172, not 1,052.
+
+**Implementation locks.**
+- Probe model: `claude-sonnet-4-6` exactly (the macro-llm "smart" model —
+  version convention forbids a silent swap). Haiku pass not in scope.
+- temperature 0.0; max_tokens 300; single fixed prompt template asking for
+  strict JSON `{"year": int, "month": int, "confidence": float}` with no
+  reasoning prose. Prompt frozen in the probe script before launch.
+- Text rendered via the committed selectors at asof = release_date
+  (`TextContext.render()`, chrome-stripped, dates scrubbed) — byte-identical
+  to what an analyst sees.
+- Transport: Message Batches API (50% price). Raw batch results are written
+  to `results/recall_probe/` and committed; scoring is a deterministic local
+  script over the committed JSON, so reruns are $0 (honors the cache rule —
+  batch calls bypass the disk cache, the committed results file replaces it).
+- Note at implementation: `src/llm/anthropic_client.py` `_PRICES` has no
+  `claude-sonnet-4-6` entry (prefix-falls-back to Haiku rates) — add
+  `(3.0, 15.0)` so any audit prices correctly.
+- Cost estimate: ≈ $1.6 batched (±25%; ~715k input / ~75k output tokens at
+  Sonnet 4.6 batch rates). Approved by GA 2026-07-22.
+
+**Peeking status.** Genuinely preregistered: no probe outputs exist. The only
+numbers seen so far are input statistics (rendered-context char counts,
+non-empty counts per driver), which are not outcomes.
+
+## Experiment log (newest first)
+
+(none yet — first candidate: the PM-agent evaluation, to be preregistered
+before any code is written)
+
+## Rejected ideas (do not retry without explicit override)
+
+(carried from macro-llm — see its EXPERIMENTS.md for details: GDELT news
+source; anonymization as look-ahead control; silent model-version swaps;
+per-headline sentiment voting; tail-risk persona as standalone alpha)
