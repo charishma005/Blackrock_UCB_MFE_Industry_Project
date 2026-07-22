@@ -24,7 +24,7 @@ import time
 
 import pandas as pd
 
-from src.data.fred_local import load_bundle
+from src.data.equity_local import load_any_bundle as load_bundle
 from src.layered.analysts import (
     CarryForward,
     build_analyst,

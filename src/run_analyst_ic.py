@@ -26,7 +26,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from src.data.fred_local import load_bundle
+from src.data.equity_local import load_any_bundle as load_bundle
 from src.layered.analysts import CarryForward, build_analyst, preflight_llm, print_run_audit
 from src.layered.evaluation import ICEvaluator, release_dates, required_ic
 from src.layered.timeline import AsOf

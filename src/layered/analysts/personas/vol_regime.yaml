@@ -1,0 +1,39 @@
+# Analyst spec — equity volatility regime.
+#
+# Ported from macro-llm's r7 single-driver equity agent. Features-only: the
+# validated r7 signal used NO text channel (a shared news feed collapsed
+# cross-analyst independence 0.15 → 0.81), so text_cues is minimal and present
+# only to satisfy the framework's non-empty-cues contract. Features are the
+# vendored EQ_* weekly series (data/equity/, already point-in-time). A LIVE run
+# of this persona is a NEW experiment — the r7 verdict attaches to the replayed
+# vector signal (see src/portfolio/replay_analyst.py), not to this prompt.
+
+display_name: "equity volatility regime (implied and realized S&P 500 volatility)"
+
+horizon:
+  # A weekly-native series: one Friday to the next is already non-overlapping at a
+  # one-step horizon, so no clock_freq resample is needed (unlike a daily series).
+  kind: fixed
+  clock: EQ_VIX
+  clock_freq: null
+  label: "one week ahead (the next weekly close)"
+  approx_days: 7
+
+mandate:
+  - "Judge whether the equity volatility regime is rising or easing over the coming week, and how strongly."
+  - "The graded measurement is vix_level: 'up' means implied volatility RISES (regime worsening)."
+  - "Weigh the level of implied volatility, its gap to recently realized volatility, and its recent direction."
+  - "Do not reason about other drivers or any trade — only equity volatility."
+
+features:
+  level_feature: vix_level
+  series:
+    - {name: vix_level, source: EQ_VIX, op: level, unit: "index points", history: 13,
+       description: "CBOE VIX index level at the weekly close."}
+    - {name: vol_risk_premium, source: EQ_VRP, op: level, unit: "fraction", history: 13,
+       description: "VIX/100 minus trailing 8-week realized S&P 500 volatility (annualized)."}
+    - {name: vix_change_4w, source: EQ_VIX_CHG4, op: level, unit: "points", history: 13,
+       description: "VIX level minus its value 4 weeks earlier."}
+
+text_cues:
+  - "equity volatility"

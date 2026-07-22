@@ -9,6 +9,8 @@ from src.layered.features import from_persona
 DRIVERS = [
     "inflation", "labor_tightness", "curve_slope", "term_premium",
     "balance_sheet", "financial_conditions", "inflation_expectations",
+    # Equity drivers ported from macro-llm r7 (data/equity/ EQ_* series).
+    "sector_breadth", "vol_regime", "positioning", "risk_appetite",
 ]
 
 

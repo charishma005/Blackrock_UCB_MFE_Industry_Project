@@ -81,8 +81,9 @@ def main():
 
     llm_client = None
     if os.environ.get("ANTHROPIC_API_KEY"):
-        from src.backtest.anthropic_client import AnthropicClient
-        llm_client = AnthropicClient(model=args.model, cache_dir=args.cache_dir)
+        from src.llm.anthropic_client import AnthropicClient
+        llm_client = AnthropicClient(model=args.model, cache_dir=args.cache_dir,
+                                     temperature=0.0)
     else:
         print("[warn] ANTHROPIC_API_KEY not set — pods and analysts are dummy/neutral, "
               "so this run only validates plumbing, not real results.\n")
