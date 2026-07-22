@@ -13,7 +13,48 @@ measured).
 
 ## Preregistered (pending)
 
-(none)
+### recall-stratified-ic — analysis plan preregistered 2026-07-22 (binds a future run)
+
+**Purpose.** The accepted position ("live with the look-ahead bias") gets one
+escape hatch: a text-channel analyst's skill measured ONLY on items the probe
+could NOT identify is the one in-window number that can partially resist the
+recall critique. This entry locks the strata and the comparison BEFORE any
+FOMC-text analyst output exists, so the future run cannot tune around them.
+
+**Strata (LOCKED).** `results/recall_probe/strata.csv` — one row per
+(statement_date × driver), from the committed fomc-recall-probe results:
+  - Stratum A "identified": `identified_exact = 1` (probe named the exact
+    meeting month), n=368 (35.0%).
+  - Stratum B "unidentified": `identified_exact = 0`, n=684 (65.0%).
+These labels are immutable for this analysis; a re-run of the probe does not
+replace them. Weekly analyst asof dates map to a statement via the corpus
+as-of rule (latest release_date ≤ asof), i.e. every analyst view inherits the
+stratum of the statement it read.
+
+**Parent-run constraint.** This plan binds the first FOMC-text-channel analyst
+run (the input-modality experiment's `text` or `text+vector` arm). That run
+must be preregistered separately — with its own skill metric, sample, cost
+estimate, and explicit spend approval — and must reference this entry. No
+analyst call may be made before that prereg exists.
+
+**Comparison (LOCKED, applied to the parent run's preregistered per-item
+skill metric, generically "IC"):** compute IC separately in A and B.
+  - **CLEAN-SKILL** iff B-stratum IC > 0 with t ≥ 2.0 AND the A−B difference
+    is not significant at t ≥ 2.0. Only this verdict permits describing the
+    in-window text channel as carrying non-recall information (still labeled
+    in-window; the forward record remains decisive).
+  - **RECALL-DRIVEN** iff A-stratum IC is significant (t ≥ 2.0) while B is
+    not, OR the A−B difference is significant with A > B.
+  - **NO-SKILL** iff neither stratum is significant.
+**Robustness gate.** The verdict must be unchanged: (a) excluding
+curve_slope (highest ID rate, 66.3% — it must not carry the result);
+(b) excluding probe parse_failed items (n=421 of the cue rows, where
+identification was censored); (c) under `identified_quarter` as the stratum
+definition. t-stats use per-statement clustering (items within a statement
+share the text).
+
+**Cost.** $0 — reuses committed probe artifacts; the paid part is the parent
+run, separately approved.
 
 ## Experiment log (newest first)
 
