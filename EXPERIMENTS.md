@@ -13,6 +13,54 @@ measured).
 
 ## Preregistered (pending)
 
+(none)
+
+## Experiment log (newest first)
+
+### fomc-recall-probe — RUN 2026-07-22, verdict same day
+
+**RESULTS** (batch msgbatch_012HVzbw8FxEa6xFngvvRKZ1, 1224/1224 succeeded,
+$0 transport errors; raw results + score.json committed under
+results/recall_probe/):
+
+| metric (quarter-level, pre-cutoff) | whole | cue |
+|---|---|---|
+| accuracy | **75.1%** (n=169) | **40.1%** (n=1039) |
+| exact-meeting accuracy | 73.9% | 35.4% |
+| year-level accuracy | 75.7% | 50.4% |
+| subperiods 05-09 / 10-19 / 20-25 | 62.5 / 96.3 / 52.1 | 40.1 / 43.9 / 34.6 |
+| post-cutoff anchor | 0% (n=3) | 0% (n=13) |
+
+**VERDICT (mechanical, per locked rules):**
+- `whole` = **RECALL-SATURATED** (75.1% ≥ 50%; holds in every subperiod).
+  Sonnet 4.6 names the exact meeting month for 74% of date-scrubbed
+  statements. The post-cutoff anchor at 0% shows the pure-inference floor is
+  ~zero — pre-cutoff identification is memorization, not inference.
+- `cue` = **PARTIAL** (40.1%).
+- Cue partitioning does **NOT** materially reduce identifiability per the
+  locked AND-rule: reduction 35.0pp ≥ 15pp passes, but 40.1% > 0.5 × 75.1%
+  = 37.6% fails (narrowly).
+- **KILL CRITERION FIRED:** cue_acc 40.1% > 25% → light preprocessing is
+  NOT a recall defense. Robust: holds in all three subperiods, at
+  year-level (50.4%), and under drop-one-driver (min 33.7%, dropping
+  curve_slope). → Rejected Ideas.
+- Per-driver: curve_slope cue-contexts are nearly as identifiable as whole
+  documents (73.4% — the rate-path language pins the period);
+  inflation_expectations lowest (13.3%).
+
+**Caveat (direction-safe):** 464 replies (43 whole / 421 cue) were prose
+reasoning truncated before the JSON and score as WRONG per the locked rule
+— all accuracies are lower bounds, so both the saturation finding and the
+kill are conservative. No re-scoring; the rule fired as locked.
+
+**Consequences:** entity-scrub arm will NOT be built as a recall fix; any
+in-training-window FOMC-text result is recall-suspect regardless of
+preprocessing; clean text-channel evidence must come from post-cutoff
+statements or the forward record. Cue partitioning remains justified on
+independence/faithfulness grounds only.
+
+<details of the locked preregistration below, unchanged>
+
 ### fomc-recall-probe — preregistered 2026-07-22 at c8f9791
 
 **Question.** Does the existing FOMC text preprocessing (date scrubbing + cue
@@ -98,12 +146,14 @@ meeting, so treat its effective n as ~172, not 1,052.
 numbers seen so far are input statistics (rendered-context char counts,
 non-empty counts per driver), which are not outcomes.
 
-## Experiment log (newest first)
-
-(none yet — first candidate: the PM-agent evaluation, to be preregistered
-before any code is written)
-
 ## Rejected ideas (do not retry without explicit override)
+
+- **Light preprocessing as recall defense** (date scrubbing, cue
+  partitioning, and by extension entity/number masking) — killed by
+  fomc-recall-probe 2026-07-22: cue-selected contexts still 40.1%
+  quarter-identifiable (>25% kill line), whole date-scrubbed statements
+  75.1%. Only date-blind designs, post-cutoff data, or the forward record
+  count as clean text-channel evidence.
 
 (carried from macro-llm — see its EXPERIMENTS.md for details: GDELT news
 source; anonymization as look-ahead control; silent model-version swaps;
