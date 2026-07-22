@@ -1,85 +1,143 @@
-# Multi-Asset AI Fund — persona-conditioned agents with performance-based weighting
+# Analyst upstream — data → agent → report
 
-A multi-asset extension of the agent-ensemble trading framework, adding macro /
-fixed-income / commodity investor agents, per-agent performance attribution,
-dynamic agent weighting ("firing"), and persona conditioning from primary sources.
+This repo is the **upstream** of the layered agent fund: the partitioned **data
+feeds** and the **analyst agents** that turn each feed into a single, scoreable
+report about one macro driver. It hands off to the rest of the fund at one typed
+seam — the `DriverView` contract — and nothing here reaches above that line.
 
-> Built on the open-source [ai-hedge-fund](https://github.com/virattt/ai-hedge-fund)
-> framework by virattt (MIT license). The equity agents (Warren Buffett, Aswath
-> Damodaran) and the Phase-1/Phase-2 agent pattern originate there; everything in
-> `src/ensemble/`, `src/instruments.py`, the multi-asset data layer, the macro
-> agents, and the persona-conditioning pipeline is new work in this repo.
+![architecture](docs/architecture.png)
 
-## The four contributions
+The two left-hand columns are what this repo owns. Each analyst reads **only its own
+driver's** evidence — engineered *measurements* (what moved) and driver-specific
+*policy language* (why it moved) — and writes a report with a direction, a
+conviction, and a falsifier. The PM pods, mechanical ensemble, and risk layer
+downstream are other teammates' work; they consume `DriverView` and build against
+`StrategyTrade` / `FundAllocation` (both defined in `src/layered/contracts.py`, the
+merge seam).
 
-1. **Multi-asset agent universe** — `Instrument`/`AssetClass` abstraction routes
-   fixed income (TLT/IEF/LQD/HYG), commodities (GC/CL/HG), and FRED macro series
-   to agents that cover them. Macro agents emit a *regime* consumed as context
-   by the whole book, not just per-ticker signals. Equity fundamentals come from
-   a pluggable data layer with three interchangeable sources — `yfinance`
-   (free, no point-in-time history), `financialdatasets.ai` (paid, point-in-time),
-   and `wrds` (Compustat/CRSP, point-in-time). (`src/instruments.py`,
-   `src/data/markets.py`, `src/data/equities*.py`, `src/agents/ray_dalio.py`)
-2. **Full portfolio metrics** — Sharpe, Sortino, Calmar, max drawdown, hit rate,
-   turnover, Spearman IC. (`src/backtest/metrics.py`)
-3. **Attribution + firing** — every agent gets a paper portfolio; rolling Sharpe
-   / IC feed a softmax weight with regime-aware floors and strike-based hard
-   exclusion. (`src/ensemble/attribution.py`, `src/ensemble/weights.py`)
-4. **Persona conditioning** — agents load distilled YAML persona specs (beliefs,
-   decision rules, vocabulary) synthesized offline from shareholder letters and
-   interview transcripts. Specs, not raw transcripts, are committed.
-   (`src/agents/personas/`, `src/agents/base.py`)
+The full design record — every decision and why — is `docs/analyst-layer.md`.
 
-## Status / roadmap
+## Why it is shaped this way
 
-- [x] Instruments + data layer (yfinance, FRED)
-- [x] Metrics module
-- [x] Attribution tracker + weight manager
-- [x] Agent base class + persona loading
-- [x] Ray Dalio macro regime agent (wired to LLM client)
-- [x] Port Warren Buffett + Aswath Damodaran agents from upstream (MIT header kept)
-- [x] Multi-asset risk manager (vol + cross-asset correlation limits)
-- [x] LLM Portfolio Manager consuming weighted signals + regime context
-      (also a `mechanical` PM mode; select via `--pm-mode`)
-- [x] Backtest engine (weekly/daily loop) + 3-way benchmark comparison study
-- [x] Point-in-time equity data via `financialdatasets.ai` and WRDS
-- [x] Persona specs committed (`src/agents/personas/*.yaml`)
-- [ ] Persona distillation script (transcripts -> YAML) — specs are hand-authored for now
-- [ ] Fixed-income agent (Gundlach-style: duration, curve, credit)
-- [ ] Commodities agent (COT positioning + trend)
+Two structural defects in the earlier analyst path are what this design removes
+(`docs/analyst-layer.md` §1): the numeric arm put the finished answer *into* the
+prompt and asked the model to agree, and the text arm sent every analyst identical
+bytes. Both are fixed by changing what crosses the first boundary — an analyst now
+receives two channels about its own driver and nothing else, and the model supplies
+all the judgment. Two invariants make that structural rather than aspirational:
+
+- **Measurements, never signals.** Features come from a *closed* vocabulary of
+  operations (`src/layered/features/ops.py`) — levels, changes, spreads, ranges. No
+  op fits a parameter, standardizes on the full sample, or scores a direction, so a
+  feature spec *cannot express a forecast*.
+- **No look-ahead.** Every series is release-dated on load and every read goes
+  through the `AsOf` gate (`src/layered/timeline.py`), so a feature at time *t* is
+  computed from data available at *t* and nothing later.
+
+## Layout
+
+```
+src/
+  data/          feeds — markets.py · fred_local.py (vendored CSVs) · fomc_text.py
+  llm/           anthropic_client.py — forced-tool structured output, fail-fast
+  layered/
+    contracts.py DriverView (the seam) + StrategyTrade + FundAllocation
+    timeline.py  AsOf — the single no-lookahead choke point
+    features/    spec · ops · engine — the measurement vocabulary
+    text/        selector · cue · whole — FOMC language, partitioned by driver
+    analysts/    llm_analyst · carry_forward · build (shared harness) · personas/*.yaml
+    evaluation/  ic · panel · report_quality — grading + the leak gauge
+  run_analyst.py · run_analyst_ic.py · run_feature_ic.py · compare_sweep.py
+data/fred/       vendored FRED CSVs — runs offline, no key
+data/fomc/       vendored FOMC corpus (documents.jsonl) — text channel, offline
+tests/           focused suite, no LLM calls
+scripts/         fetch_fred.py — add a FRED series (needs a key)
+```
 
 ## Setup
 
 ```bash
-pip install pandas numpy requests yfinance pyyaml pydantic anthropic
-pip install "multi-asset-fund[wrds]"   # optional: only for --equity-data-source wrds
-
-export FRED_API_KEY=...         # free: fred.stlouisfed.org (macro series)
-export ANTHROPIC_API_KEY=...    # LLM agents + LLM portfolio manager
-# optional, depending on --equity-data-source:
-export FINANCIAL_DATASETS_API_KEY=...   # for financialdatasets.ai (point-in-time)
-export WRDS_USERNAME=...                # for wrds (password via ~/.pgpass)
+pip install -r requirements.txt
+# Data runs offline out of the box (CSVs vendored in data/fred/).
+export ANTHROPIC_API_KEY=...    # only for the scored LLM runs
 ```
 
-Run the headline experiment (equal- vs performance-weighted vs benchmark):
+## Running it
+
+**1 — Free feature check (no key, no spend).** Is a driver predictable at all from
+measurements available at the time? Run this first; it also validates a persona's
+wiring end to end.
 
 ```bash
-python3 -m src.run_backtest --start 2024-01-01 --end 2024-12-31 \
-    --equity-data-source yfinance      # yfinance | financialdatasets | wrds
+python3 -m src.run_feature_ic --driver inflation
+python3 -m src.run_feature_ic --driver curve_slope --start 2005-01-01
 ```
 
-Useful flags: `--rebalance-freq` (pandas offset, e.g. `W-FRI`, `ME`),
-`--model` (default `claude-haiku-4-5-20251001`), `--pm-mode` (`mechanical` |
-`llm`), `--no-risk-manager`, `--cache-dir`, `--verbose`.
+**2 — Inspect the exact prompt (no spend).**
 
-> **Look-ahead note:** `yfinance` has no point-in-time fundamentals, so
-> Buffett/Damodaran signals are computed once from *today's* filings and are
-> look-ahead biased — fine for a smoke test, not for a real headline run. Use
-> `financialdatasets` or `wrds` for point-in-time results.
+```bash
+python3 -m src.run_analyst --driver labor_tightness --dry-run --asof 2023-08-01
+```
 
-## Headline experiment
+**3 — Scored LLM run.** One call per release on the driver's clock, scored by the
+same `ICEvaluator` the features use.
 
-`src.run_backtest` runs a 3-way comparison — equal-weighted agents vs
-performance-weighted (this repo) vs a naive buy-and-hold benchmark — and reports
-Sharpe/Sortino/Calmar/max-DD plus per-agent attribution. A 2020–2025 run is
-captured in `attribution_2020_2025.txt`.
+```bash
+python3 -m src.run_analyst_ic --driver inflation --model claude-haiku-4-5-20251001 \
+    --out reports/inflation_haiku.jsonl
+python3 -m src.compare_sweep reports/sweep_haiku.jsonl reports/sweep_opus.jsonl
+```
+
+**Cost.** A full 2005→2026 run is ~255 calls ≈ **$1 on Haiku**, but ~**$13 on Opus**
+(≈$0.05/call). While iterating on a persona, use a short window — e.g.
+`--start 2022-01-01 --limit 24` is ~24 calls (~$0.10 Haiku, ~$1.2 Opus) and still
+spans the 2022–23 tightening. Widen to the full window only for a final read.
+
+## Adding an analyst = a YAML file
+
+Copy `src/layered/analysts/personas/_TEMPLATE.yaml` to `<driver>.yaml`, fill in the
+`mandate` / `features` / `text_cues` / `horizon` blocks, and it runs — no code. The
+feature engine, isolation gate, prompts, carry-forward, and grading are all
+driver-agnostic. Validate for free with `run_feature_ic --driver <driver>` before
+spending anything on an LLM run.
+
+Drivers currently defined (`personas/`):
+
+| driver | data | status |
+|---|---|---|
+| `inflation` | CPI, core PCE | built, validated, LLM-run |
+| `labor_tightness` | UNRATE | built, feature-validated offline |
+| `curve_slope` | 2s10s (DGS2/DGS10) | built, feature-validated offline |
+| `term_premium` | 10y yield proxy | built, feature-validated offline |
+| `balance_sheet` | WALCL | built — needs `scripts/fetch_fred.py WALCL` |
+| `financial_conditions` | NFCI | built — needs `scripts/fetch_fred.py NFCI` |
+| `inflation_expectations` | T10YIE | built — needs `scripts/fetch_fred.py T10YIE` |
+
+Market-clock drivers (curve, term premium, breakevens) trade daily, so their persona
+sets `horizon.clock_freq: ME` — the evaluation clock is sampled to month-end, keeping
+observations non-overlapping and the t-statistic honest.
+
+## Data
+
+FRED CSVs are vendored in `data/fred/` (public-domain), so the repo runs offline. To
+add a series a persona needs:
+
+```bash
+export FRED_API_KEY=...                     # free: fred.stlouisfed.org
+python3 scripts/fetch_fred.py WALCL NFCI T10YIE
+```
+
+The FOMC statement/minutes corpus is vendored at `data/fomc/documents.jsonl` (343
+release-dated documents), so the text channel also runs offline. Override with
+`FOMC_DOCS_PATH` if it sits elsewhere.
+
+## Tests
+
+```bash
+python3 -m pytest tests/          # no keys, no network
+```
+
+No-lookahead, input isolation, the closed op vocabulary, persona validity, the prompt
+guardrails (no answer / no date in the prompt, pairwise-distinct across analysts), and
+the seam contract. (If your environment autoloads a broken pytest plugin, run with
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`.)

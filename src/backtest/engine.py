@@ -1,31 +1,26 @@
-"""Backtest engine — the daily loop that turns one-off agent signals into a
-real track record with rolling attribution and dynamic (or equal) weighting.
+"""Backtest engine — the daily loop that turns PM-pod signals into a real track
+record with rolling attribution and dynamic (or equal) weighting.
 
-Two equity data modes, set via BacktestConfig.equity_data_source:
+Pipeline (see slides/architecture.html):
 
-  "yfinance" (default, free) — no point-in-time history. Buffett/Damodaran's
-  facts are IDENTICAL at every rebalance date, so their signal is computed
-  ONCE and held fixed for the whole run — LOOK-AHEAD BIASED (uses today's
-  fundamentals throughout the backtest period). Fine for testing plumbing;
-  do not cite Sharpe ratios from this mode.
+    analysts (DriverView) → PM pods → agent_signals → ensemble → risk → book
 
-  "financialdatasets" (paid, ~$20 one-time credits) — genuine point-in-time
-  data via report_period_lte. Equity signals are recomputed at each
-  rebalance using ONLY financials reported by that date. To control cost,
-  the LLM is only re-queried when the underlying filing's report_period
-  actually changed since the last rebalance (equities file quarterly, so
-  weekly rebalancing would otherwise waste ~12 of 13 LLM calls per quarter
-  on an unchanged filing) — see `_get_equity_signals_pointintime` below.
+Each PM pod is treated by the ensemble as one "agent": the pod's per-instrument
+calls are scored, weighted, and fired exactly the way individual agents used to
+be. The three pods (relative_value, equities_topdown, trend_follower) live in
+``src.portfolio.pods``; the analyst→pod adapter is ``src.portfolio.analyst_feed``.
 
-Ray Dalio's macro/price inputs genuinely change week to week regardless of
-mode, so he always recomputes at every rebalance.
+Portfolio construction: at each rebalance date every pod's signals are encoded as
+signed exposures (see ensemble/attribution.encode_signal), normalized to unit
+gross exposure per pod, then blended by that pod's current weight (equal or
+performance-based) into one target weight vector. Target weights are held constant
+until the next rebalance and applied to next-day returns (shift(1) — no lookahead).
 
-Portfolio construction: at each rebalance date, each agent's signals are
-encoded as signed exposures (see ensemble/attribution.encode_signal),
-normalized to unit gross exposure per agent, then blended by that agent's
-current weight (equal or performance-based) into one target weight vector.
-Target weights are held constant until the next rebalance and applied to
-next-day returns (shift(1) — no lookahead).
+NOTE: the PM pods and the analyst feed are currently DUMMY placeholders that emit
+neutral signals, so a run with no API key exercises the full plumbing end-to-end
+without producing real views. Swap in the real pods / live analyst feed later;
+nothing in this engine needs to change, because the agent_signals contract is
+already what it consumes.
 """
 from __future__ import annotations
 
@@ -36,22 +31,17 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from src.agents.aswath_damodaran import AswathDamodaranAgent
-from src.agents.ray_dalio import RayDalioAgent
-from src.agents.warren_buffett import WarrenBuffettAgent
 from src.backtest.metrics import RISK_FREE_ANNUAL, TRADING_DAYS, summary, turnover
-from src.data.equities import get_equity_facts_bundle as get_equity_facts_pointintime
-from src.data.equities_wrds import get_equity_facts_bundle as get_equity_facts_wrds
-from src.data.equities_yfinance import get_equity_facts_bundle as get_equity_facts_yfinance
 from src.data.markets import daily_returns, fetch_macro_bundle, fetch_prices
 from src.ensemble.attribution import AttributionTracker, encode_signal
 from src.ensemble.weights import AgentPolicy, WeightManager
-from src.instruments import DEFAULT_UNIVERSE, AssetClass, Instrument
+from src.instruments import DEFAULT_UNIVERSE, AssetClass
+from src.portfolio.analyst_feed import analyst_views_asof
 from src.portfolio.manager import PMConfig, PortfolioManager
+from src.portfolio.pods import PMPods
 from src.risk.manager import RiskConfig, RiskManager
 
 WeightingMode = Literal["equal", "performance"]
-EquityDataSource = Literal["yfinance", "financialdatasets", "wrds"]
 
 
 @dataclass
@@ -65,24 +55,22 @@ class BacktestConfig:
     weighting: WeightingMode = "performance"
     weight_temperature: float = 0.75
     use_risk_manager: bool = True     # apply vol targeting + correlation limits
-    pm_mode: str = "mechanical"       # "mechanical" or "llm" portfolio manager
-    equity_data_source: EquityDataSource = "yfinance"  # "yfinance" (free, look-ahead biased)
-                                                        # or "financialdatasets" (paid, point-in-time)
+    pm_mode: str = "mechanical"       # final synthesis: "mechanical" or "llm"
 
 
 @dataclass
 class BacktestResult:
     values: pd.Series
     weights_over_time: pd.DataFrame          # (date x instrument) target weights, daily
-    agent_weights_history: pd.DataFrame       # (rebalance_date x agent) weights
+    agent_weights_history: pd.DataFrame       # (rebalance_date x pod) weights
     scorecards_history: dict[pd.Timestamp, pd.DataFrame] = field(default_factory=dict)
     metrics: dict = field(default_factory=dict)
-    fired_agents: set[str] = field(default_factory=set)
-    static_signals: dict[str, dict[str, dict]] = field(default_factory=dict)   # Buffett/Damodaran, full reasoning
-    rebalance_signals: dict[pd.Timestamp, dict[str, dict]] = field(default_factory=dict)  # Dalio per date, full reasoning
+    fired_agents: set[str] = field(default_factory=set)       # pods hard-fired by the ensemble
+    static_signals: dict[str, dict[str, dict]] = field(default_factory=dict)   # reserved (unused: pods are recomputed per date)
+    rebalance_signals: dict[pd.Timestamp, dict[str, dict]] = field(default_factory=dict)  # {date: {pod: {sym: signal}}}
     risk_diag_history: dict[pd.Timestamp, dict] = field(default_factory=dict)   # per-rebalance risk-layer diagnostics
-    pm_reasoning_history: dict[pd.Timestamp, str] = field(default_factory=dict) # per-rebalance PM reasoning text
-    attribution: object | None = None          # AttributionTracker, for per-agent paper P&L in diagnostics
+    pm_reasoning_history: dict[pd.Timestamp, str] = field(default_factory=dict) # per-rebalance final-PM reasoning text
+    attribution: object | None = None          # AttributionTracker, for per-pod paper P&L in diagnostics
     asset_returns: pd.DataFrame | None = None  # (date x symbol) daily returns used for attribution
 
 
@@ -101,7 +89,7 @@ def _blend_target_weights(
         ).fillna(0.0)
         gross = expo.abs().sum()
         if gross > 0:
-            expo = expo / gross  # each agent's own book is unit gross exposure
+            expo = expo / gross  # each pod's own book is unit gross exposure
         blended += w * expo
     return blended
 
@@ -109,63 +97,17 @@ def _blend_target_weights(
 def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
     universe = DEFAULT_UNIVERSE
     all_syms = [i.symbol for i in universe if i.tradeable]
-    equity_syms = [i.symbol for i in universe if i.asset_class == AssetClass.EQUITY]
     fred_ids = [i.symbol for i in universe if i.asset_class == AssetClass.MACRO]
 
-    # Price history for ALL tradeable instruments (yfinance covers equities,
-    # ETF proxies, and futures fine — separate concern from fundamentals source).
+    # Price history for ALL tradeable instruments.
     prices = fetch_prices(all_syms, config.start, config.end)
     rets = daily_returns(prices)
 
     macro_start = (pd.Timestamp(config.start) - pd.Timedelta(days=config.macro_lookback_days)).strftime("%Y-%m-%d")
     macro_full = fetch_macro_bundle(fred_ids, macro_start, config.end)
 
-    buffett = WarrenBuffettAgent(llm_client=llm_client)
-    damo = AswathDamodaranAgent(llm_client=llm_client)
-
-    point_in_time = config.equity_data_source in ("financialdatasets", "wrds")
-    pit_fetcher = {"financialdatasets": get_equity_facts_pointintime, "wrds": get_equity_facts_wrds}.get(config.equity_data_source)
-    static_signals: dict[str, dict[str, dict]] = {}
-    equity_signal_cache: dict[tuple[str, str | None, str], dict] = {}  # (ticker, report_period, agent) -> signal dict
-    equity_fetch_cache: dict[tuple[str, tuple[int, int]], dict] = {}   # (ticker, (year, quarter)) -> raw data bundle
-
-    if not point_in_time:
-        # LOOK-AHEAD BIASED PATH: yfinance has no point-in-time history, so
-        # every rebalance date would see IDENTICAL (today's) fundamentals.
-        # Computed once and held fixed — do not cite Sharpe from this mode.
-        equity_data = {sym: get_equity_facts_yfinance(sym) for sym in equity_syms}
-        static_signals = {
-            "warren_buffett": buffett.run(universe, equity_data),
-            "aswath_damodaran": damo.run(universe, equity_data),
-        }
-
-    def get_equity_signals_pointintime(asof_str: str) -> dict[str, dict[str, dict]]:
-        """Recompute Buffett/Damodaran using ONLY financials reported by
-        `asof_str`. Two-level caching, since financialdatasets.ai charges
-        per request regardless of whether the answer changed:
-          1. DATA fetch cached by (ticker, calendar quarter) — filings are
-             quarterly, so fetching weekly would burn ~4x the API credits
-             needed for no new information.
-          2. LLM call cached by (ticker, report_period, agent) — belt and
-             suspenders in case the API's report_period changes mid-quarter
-             for some ticker (irregular fiscal calendars).
-        """
-        asof_ts = pd.Timestamp(asof_str)
-        quarter_key = (asof_ts.year, asof_ts.quarter)
-        out: dict[str, dict[str, dict]] = {"warren_buffett": {}, "aswath_damodaran": {}}
-        for sym in equity_syms:
-            fetch_key = (sym, quarter_key)
-            if fetch_key not in equity_fetch_cache:
-                equity_fetch_cache[fetch_key] = pit_fetcher(sym, asof_str)
-            bundle = equity_fetch_cache[fetch_key]
-            report_period = bundle.get("latest_report_period")
-            for agent_name, agent in (("warren_buffett", buffett), ("aswath_damodaran", damo)):
-                cache_key = (sym, report_period, agent_name)
-                if cache_key not in equity_signal_cache:
-                    facts = agent.compute_facts(Instrument(sym, AssetClass.EQUITY), bundle)
-                    equity_signal_cache[cache_key] = agent.judge(Instrument(sym, AssetClass.EQUITY), facts).model_dump()
-                out[agent_name][sym] = equity_signal_cache[cache_key]
-        return out
+    # The three PM pods. Each is one "agent" from the ensemble's point of view.
+    pods = PMPods()
 
     rebalance_dates = pd.date_range(config.start, config.end, freq=config.rebalance_freq)
     # snap each target date to the nearest prior trading day actually in the price index
@@ -180,24 +122,23 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
     tracker = AttributionTracker()
     wm = WeightManager(
         temperature=config.weight_temperature,
-        policies={"ray_dalio": AgentPolicy(window=120, floor=0.05, fire_after=5)},
+        # The trend follower is the macro/slow pod — give it a longer evaluation
+        # window and a floor so it is not fired on short-window noise during a
+        # quiet regime (the old ray_dalio policy, re-pointed at the pod).
+        policies={"trend_follower": AgentPolicy(window=120, floor=0.05, fire_after=5)},
     )
 
     weights_at_rebalance: dict[pd.Timestamp, pd.Series] = {}
     agent_weight_rows: dict[pd.Timestamp, dict[str, float]] = {}
     scorecards_history: dict[pd.Timestamp, pd.DataFrame] = {}
     rebalance_signals_history: dict[pd.Timestamp, dict[str, dict]] = {}
-    agents_seen: set[str] = {"warren_buffett", "aswath_damodaran"}
+    agents_seen: set[str] = set(pods.names)
 
     risk_mgr = RiskManager(RiskConfig()) if config.use_risk_manager else None
     pm = PortfolioManager(PMConfig(mode=config.pm_mode), llm_client=llm_client)
     risk_diag_history: dict[pd.Timestamp, dict] = {}
     pm_reasoning_history: dict[pd.Timestamp, str] = {}
 
-    # Heartbeat to stderr so a long run (each rebalance fires live LLM calls
-    # for Ray Dalio) visibly makes progress instead of looking hung. stderr is
-    # unbuffered enough with flush=True even when stdout is redirected to a
-    # file, and it keeps the results table on stdout clean.
     n_reb = len(rebalance_dates)
     if n_reb:
         print(f"[backtest:{config.weighting}] {n_reb} rebalance dates "
@@ -207,35 +148,25 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
     for i, asof in enumerate(rebalance_dates, start=1):
         print(f"[backtest:{config.weighting}] rebalance {i}/{n_reb}  {asof.date()}",
               file=sys.stderr, flush=True)
-        # No-lookahead slices: only data up to `asof` is visible to Dalio.
+        # No-lookahead slice: only data up to `asof` is visible to the analysts.
         macro_asof = {sid: s.loc[:asof] for sid, s in macro_full.items()}
-        prices_asof = prices.loc[:asof]
 
-        dalio = RayDalioAgent(llm_client=llm_client, macro_data=macro_asof, prices=prices_asof)
-        dalio_signals = dalio.run(universe, data_by_symbol={})
-        agents_seen.add("ray_dalio")
-
-        equity_signals_today = static_signals if not point_in_time else get_equity_signals_pointintime(asof.strftime("%Y-%m-%d"))
-        day_signals = {**equity_signals_today, "ray_dalio": dalio_signals}
+        # analysts → pods → agent_signals dict, keyed by pod name.
+        analyst_views = analyst_views_asof(asof, macro_asof)
+        day_signals = pods.run(analyst_views, universe)
         rebalance_signals_history[asof] = day_signals
         for agent, sigs in day_signals.items():
             tracker.record(agent, asof, sigs)
 
         rets_so_far = rets.loc[:asof]
-        # Score each agent on its OWN policy window (e.g. Dalio's 120d) rather
-        # than one global 60d window — otherwise a macro agent's longer intended
-        # evaluation horizon is silently ignored and it gets fired on short noise.
+        # Score each pod on its OWN policy window rather than one global window,
+        # so a slow/macro pod's longer intended horizon is respected.
         eval_windows = {a: wm.policy(a).window for a in agents_seen}
         scorecard = tracker.scorecard(rets_so_far, windows=eval_windows)
         scorecards_history[asof] = scorecard
 
         # Always update fire/strike state from the scorecard, regardless of
-        # blending mode. wm.update() is the ONLY place strikes accumulate and
-        # agents enter wm.fired, so calling it unconditionally is what lets
-        # equal-weight genuinely "respect hard-fire logic" as documented,
-        # instead of never firing anyone. It's cheap — pure Python over an
-        # already-computed scorecard — and the performance branch is unchanged
-        # (same single call per rebalance, its return value used as before).
+        # blending mode, so equal-weight respects the same hard-fire logic.
         performance_weights = wm.update(scorecard)
 
         if config.weighting == "performance":
@@ -253,8 +184,10 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
             blended, risk_diag = risk_mgr.apply(blended, rets_so_far)
             risk_diag_history[asof] = risk_diag
 
-        # ── portfolio manager: mechanical pass-through or LLM synthesis ──
-        regime = dalio.regime()
+        # ── final PM synthesis: mechanical pass-through or LLM synthesis ──
+        # Regime is a placeholder now that the macro agent is gone; the real
+        # regime read can come from a dedicated analyst (e.g. financial_conditions).
+        regime: dict = {}
         final_weights, pm_reason = pm.decide(blended, day_signals, regime, risk_diag)
         pm_reasoning_history[asof] = pm_reason
 
@@ -272,12 +205,8 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
     common = weights_df.columns.intersection(rets.columns)
     lagged = weights_df[common].shift(1)
     asset_pnl = (lagged * rets[common]).sum(axis=1)
-    # Uninvested cash earns the risk-free rate. Without this, a book that runs a
-    # cash sleeve (net exposure < 1) earns 0% on that sleeve while metrics.py
-    # STILL charges the full rf in the Sharpe's excess-return term — a phantom
-    # drag that dominates the ratio at low realized vol. The cash weight is
-    # 1 - net exposure (short proceeds add to cash, matching a margin account),
-    # which makes the return series self-consistent with the rf charged downstream.
+    # Uninvested cash earns the risk-free rate (keeps the return series
+    # self-consistent with the rf charged in the Sharpe downstream).
     cash_weight = 1.0 - lagged.sum(axis=1)
     cash_pnl = cash_weight * (RISK_FREE_ANNUAL / TRADING_DAYS)
     port_rets = (asset_pnl + cash_pnl).fillna(0.0)
@@ -290,7 +219,7 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
         scorecards_history=scorecards_history,
         metrics=summary(values, weights_df),
         fired_agents=wm.fired,
-        static_signals=static_signals,
+        static_signals={},
         rebalance_signals=rebalance_signals_history,
         risk_diag_history=risk_diag_history,
         pm_reasoning_history=pm_reasoning_history,
@@ -300,8 +229,8 @@ def run_backtest(config: BacktestConfig, llm_client=None) -> BacktestResult:
 
 
 def run_benchmark(config: BacktestConfig) -> BacktestResult:
-    """Equal-weight buy-and-hold across all tradeable instruments — no agents,
-    no rebalancing. The naive baseline the agent ensembles should beat."""
+    """Equal-weight buy-and-hold across all tradeable instruments — no pods,
+    no rebalancing. The naive baseline the pod ensemble should beat."""
     universe = DEFAULT_UNIVERSE
     all_syms = [i.symbol for i in universe if i.tradeable]
     prices = fetch_prices(all_syms, config.start, config.end)
@@ -323,8 +252,8 @@ def run_benchmark(config: BacktestConfig) -> BacktestResult:
 
 
 def three_way_comparison(config: BacktestConfig, llm_client=None) -> pd.DataFrame:
-    """The headline experiment: equal-weighted agents vs performance-weighted
-    agents vs a naive equal-weight buy-and-hold benchmark."""
+    """The headline experiment: equal-weighted pods vs performance-weighted
+    pods vs a naive equal-weight buy-and-hold benchmark."""
     eq_cfg = BacktestConfig(**{**config.__dict__, "weighting": "equal"})
     pw_cfg = BacktestConfig(**{**config.__dict__, "weighting": "performance"})
 
@@ -333,8 +262,8 @@ def three_way_comparison(config: BacktestConfig, llm_client=None) -> pd.DataFram
     benchmark_result = run_benchmark(config)
 
     rows = {
-        "equal_weighted_agents": equal_result.metrics,
-        "performance_weighted_agents": weighted_result.metrics,
+        "equal_weighted_pods": equal_result.metrics,
+        "performance_weighted_pods": weighted_result.metrics,
         "benchmark_equal_weight_buy_hold": benchmark_result.metrics,
     }
     return pd.DataFrame(rows).T
