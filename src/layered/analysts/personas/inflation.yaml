@@ -1,0 +1,134 @@
+# Analyst spec — inflation driver.
+#
+# Three blocks, and the split between them is the design:
+#   mandate     what this analyst is asked to judge   (prompted)
+#   features    what it is permitted to measure       (computed, never a signal)
+#   text_cues   which policy language reaches it      (partitioned, never the whole doc)
+#
+# The feature block fixes what this analyst is able to *notice*, so it is a
+# first-class design object rather than a convenience. Every entry is a
+# measurement — a level, a change, a spread, a distance from a stated policy
+# constant. Nothing here is fitted, standardized on a full sample, or scored.
+# Judgment is the model's job; a feature named like `inflation_momentum_signal`
+# would be smuggling the answer back into the prompt.
+#
+# display_name / mandate are also read by the legacy SingleDriverAnalyst, which
+# ignores the blocks below it.
+
+display_name: "inflation (consumer price and PCE inflation)"
+
+# The prediction horizon, stated in the driver's own units rather than in trading
+# days. "63 days" is not a meaningful unit to an inflation analyst reading a series
+# that updates twelve times a year; "the next print" is. Fixing the horizon at one
+# release is also what makes the evaluation honest — consecutive release-to-release
+# outcomes do not overlap, so the t-statistic needs no autocorrelation correction.
+# `approx_days` exists only to populate the DriverView contract, which predates this
+# and requires a day count.
+horizon:
+  kind: next_release
+  clock: CPIAUCSL
+  label: "the next monthly CPI release (roughly one month ahead)"
+  approx_days: 31
+
+mandate:
+  - "Judge whether consumer inflation is accelerating or decelerating, and how strongly."
+  - "Weigh both the level relative to the 2% target and the recent momentum."
+  - "Headline moves with energy and food; core is the better read on persistence. When they
+     diverge, say which one you are weighting and why."
+  - "The Committee's 2% objective is stated in terms of PCE, which is why core PCE sits here
+     alongside headline CPI."
+  - "Do not reason about interest rates, growth, or any trade — only inflation."
+
+features:
+  level_feature: headline_cpi_yoy
+
+  # Trajectory: the analyst sees the path, not just the endpoint.
+  # `description` is construction only — what the number IS and how it is computed,
+  # never what it implies for direction. Shown to the model only in the described
+  # arm (--describe-features). The model supplies all meaning itself.
+  series:
+    - {name: headline_cpi_yoy, source: CPIAUCSL, op: yoy, periods: 12, unit: "% y/y", history: 13,
+       description: "Headline CPI (all items), percent change versus the same month one year earlier."}
+    - {name: core_pce_yoy,     source: PCEPILFE, op: yoy, periods: 12, unit: "% y/y", history: 13,
+       description: "Core PCE price index (excluding food and energy), percent change versus one year earlier."}
+    # The monthly path. Previously absent entirely: the analyst was asked to predict
+    # the next move in a year-over-year rate while only ever seeing the year-over-year
+    # rate, never the monthly changes that build it.
+    - {name: headline_mom, source: CPIAUCSL, op: pct_change, window: 1, unit: "% m/m", history: 13,
+       description: "Headline CPI, percent change versus the previous month; not annualized."}
+
+  # Derived readings, so the model is not doing arithmetic on thirteen numbers.
+  scalars:
+    # 3m annualized turns before year-over-year does — the standard way to see
+    # recent momentum diverging from the trailing year.
+    - {name: headline_3m_annualized, source: CPIAUCSL, op: pct_change_annualized,
+       window: 3, periods_per_year: 12, unit: "%",
+       description: "Headline CPI over the last 3 months, expressed as a compounded annual rate."}
+    - {name: core_3m_annualized,     source: PCEPILFE, op: pct_change_annualized,
+       window: 3, periods_per_year: 12, unit: "%",
+       description: "Core PCE over the last 3 months, expressed as a compounded annual rate."}
+    # Acceleration: change in the year-over-year rate itself.
+    - {name: headline_yoy_change_3m, source: "@headline_cpi_yoy", op: diff, window: 3, unit: "pp",
+       description: "headline_cpi_yoy minus its value 3 months ago, in percentage points."}
+    - {name: core_yoy_change_3m,     source: "@core_pce_yoy",     op: diff, window: 3, unit: "pp",
+       description: "core_pce_yoy minus its value 3 months ago, in percentage points."}
+    - {name: core_distance_from_target, source: "@core_pce_yoy", op: distance_from_reference,
+       reference: 2.0, unit: "pp",
+       description: "core_pce_yoy minus 2.0, in percentage points."}
+    - {name: core_minus_headline, sources: ["@core_pce_yoy", "@headline_cpi_yoy"],
+       op: spread, unit: "pp",
+       description: "core_pce_yoy minus headline_cpi_yoy, in percentage points."}
+    # Position within the last year's range. The range bounds alone were handed over
+    # as raw levels in the first run, leaving "we are at the top of the range" as
+    # arithmetic the model had to perform mentally while reading thirteen other
+    # numbers — and it measurably failed to (correlation with 12m_high was only
+    # -0.13, against +0.36 with momentum, despite range being the stronger signal in
+    # both regimes). Stated directly here instead.
+    - {name: headline_yoy_12m_low,  source: "@headline_cpi_yoy", op: rolling_min,
+       window: 12, unit: "% y/y",
+       description: "The lowest value of headline_cpi_yoy over the trailing 12 months."}
+    - {name: headline_yoy_12m_high, source: "@headline_cpi_yoy", op: rolling_max,
+       window: 12, unit: "% y/y",
+       description: "The highest value of headline_cpi_yoy over the trailing 12 months."}
+    - {name: yoy_above_12m_low,  sources: ["@headline_cpi_yoy", "@headline_yoy_12m_low"],
+       op: spread, unit: "pp",
+       description: "headline_cpi_yoy minus headline_yoy_12m_low, in percentage points."}
+    - {name: yoy_12m_range_width, sources: ["@headline_yoy_12m_high", "@headline_yoy_12m_low"],
+       op: spread, unit: "pp",
+       description: "headline_yoy_12m_high minus headline_yoy_12m_low, in percentage points."}
+    - {name: yoy_range_position, sources: ["@yoy_above_12m_low", "@yoy_12m_range_width"],
+       op: ratio, unit: "0-1",
+       description: "yoy_above_12m_low divided by yoy_12m_range_width; 0 at the trailing-12-month low, 1 at the high."}
+
+    # ── base effects ──────────────────────────────────────────────────────────
+    # A year-over-year rate is a rolling 12-month window, so the next reading equals
+    # the incoming month minus the month dropping out — and the month dropping out is
+    # already known today. The first run asked the analyst to predict a quantity whose
+    # mechanical half it was never shown, which is a plausible reason it fell back on
+    # visible momentum. Pure arithmetic on past observations: no fitting, no parameter
+    # chosen from outcomes, nothing derived from the target.
+    # Descriptions here are deliberately bare: what the number is, nothing about the
+    # base-effect mechanism it participates in. Whether the month recorded a year ago
+    # matters, and how, is exactly what we are testing the model's ability to work out.
+    - {name: outgoing_mom, source: "@headline_mom", op: lag, periods: 11, unit: "% m/m",
+       description: "The month-over-month headline CPI change recorded 11 months ago."}
+    - {name: headline_mom_3m_avg, source: "@headline_mom", op: moving_average,
+       window: 3, unit: "% m/m",
+       description: "The average of the last 3 monthly headline CPI changes."}
+    - {name: mom_gap_vs_outgoing, sources: ["@headline_mom_3m_avg", "@outgoing_mom"],
+       op: spread, unit: "pp",
+       description: "headline_mom_3m_avg minus outgoing_mom, in percentage points."}
+
+# Sentences mentioning any cue are routed to this analyst. Strict partition for
+# now: cross-driver causal language (labour, financial conditions) is NOT included,
+# even where it is the stated reason for the inflation stance. That is an open
+# decision — the whole-document control arm measures what the strictness costs.
+text_cues:
+  - inflation
+  - inflationary
+  - price
+  - prices
+  - "2 percent"
+  - PCE
+  - disinflation
+  - deflation

@@ -26,8 +26,13 @@ FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 # (Treasury yields) publish same day -> lag 0 (default).
 PUBLICATION_LAG_DAYS: dict[str, int] = {
     "CPIAUCSL": 14,   # monthly CPI, released ~2 weeks after the reference month
+    "CPILFESL": 14,   # core CPI, same release as headline
+    "PCEPILFE": 30,   # core PCE — the Fed's actual 2% target measure, released ~1 month later
     "UNRATE": 7,      # monthly jobs report, released ~1st Friday of following month
     "PAYEMS": 7,      # nonfarm payrolls, same release as UNRATE
+    "NFCI": 7,        # weekly (Wed-dated) financial conditions, released the following week
+    "WALCL": 2,       # weekly Fed balance sheet (H.4.1), Wed-dated, released next day
+    # T10YIE / DFII10 are daily market series → publish same-day → default lag 0.
 }
 
 
