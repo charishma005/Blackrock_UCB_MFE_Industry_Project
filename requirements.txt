@@ -1,0 +1,12 @@
+# Analyst upstream — runtime dependencies.
+# The data → agent → report chain runs offline (FRED CSVs are vendored in data/fred/);
+# only the scored LLM runs need `anthropic` + an ANTHROPIC_API_KEY, and only
+# scripts/fetch_fred.py needs `requests` + a FRED_API_KEY.
+pandas>=2.2          # needs "ME" resample alias (market-clock drivers)
+numpy>=1.24
+pyyaml>=6.0
+pydantic>=2.0        # code uses the v2 API (model_dump / model_validate / model_copy)
+anthropic>=0.40      # LLM analyst runs (run_analyst, run_analyst_ic)
+requests>=2.28       # scripts/fetch_fred.py (add a new FRED series)
+matplotlib>=3.6      # notebooks/analyst_evaluation.ipynb
+pytest>=7.0          # tests/

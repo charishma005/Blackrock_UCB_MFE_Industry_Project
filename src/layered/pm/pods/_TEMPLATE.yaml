@@ -1,0 +1,230 @@
+# PM pod TEMPLATE — copy to <pod>.yaml and fill in. A PM is fully described by this
+# file; adding one is configuration, not code. This is the PM's counterpart to
+# analysts/personas/_TEMPLATE.yaml, and it is written to be readable on its own: you
+# should be able to design a mandate from this file without the rest of the repo.
+#
+# A pod has six blocks:
+#   display_name  one line naming the pod, shown at the top of the system prompt
+#   clock_freq    how often the pod meets
+#   board         how tolerant it is of a stale analyst view
+#   listens_to    which drivers it TAKES A VIEW ON, and each one's polarity
+#   reads         which analysts' reports it SEES (may be wider than listens_to)
+#   mandate +     what it is asked to judge, how to weigh the panel, and what trade
+#   weighing +      resolves the research
+#   trade
+#
+#
+# ── WHAT THE PM IS SHOWN ────────────────────────────────────────────────────
+#
+# The user prompt is a *brief*: the panel's reports rendered into one block. Per
+# driver it carries
+#
+#     === <driver> ===
+#     Call: up, conviction 0.60
+#     Horizon: <the horizon in that analyst's own words>
+#     Status: formed 22 days ago; STALE — no fresher read is available.
+#     Report:
+#       <the analyst's prose>
+#     Would change its mind if: <that analyst's falsifier>
+#     Leaned on: <the measurements it cited>
+#
+# then a final section, "What the panel says it was never handed", listing each
+# analyst's declared missing inputs as a driver-to-driver dependency graph. That
+# section is the PM's structural reason to exist: every analyst is isolated by design,
+# so the only agent that can see "the inflation analyst is judging services
+# persistence with no read on wages, and the labour analyst has that read" is the one
+# reading all of them at once. A mandate that ignores the gaps block is leaving the
+# layer's whole advantage on the table.
+#
+# A driver with NO current view still gets a block saying it is uncovered. Absence is
+# always visible; silence never means agreement.
+#
+#
+# ── WHAT THE PM RETURNS ─────────────────────────────────────────────────────
+#
+# A forced tool call. Prose first, then the numbers, so the numbers are a conclusion
+# of the reasoning rather than labels defended after the fact. There is deliberately
+# only ONE prose field: given two, models collapse the whole answer into one of them
+# and take the structured fields down with it. Every other field below is structured,
+# so none of them competes with `notes` for the same content.
+#
+#     notes         the reconciled read in prose — this IS the report
+#     leaned_on     which analysts actually moved this view
+#     discounted    which analysts it set aside, and why
+#     falsifier     what would flip the reconciled read
+#     confidence    how much it trusts its own reconciliation
+#     risks         each a sentence plus a tag from `trade.risk_tags` below
+#     drivers       one {driver, conviction, why} per driver it took a view on
+#     trade         legs, conviction, rationale — only if `trade:` is declared below
+#
+#
+# ── WHAT THE CODE ALREADY SAYS, SO THE MANDATE MUST NOT REPEAT IT ───────────
+#
+# Three blocks are appended to every system prompt automatically (see llm_pm.py): the
+# conviction scale (+1.0 falling to -1.0, with its sign convention), the reminder that
+# abstaining on a driver is a legitimate answer, and the output contract. A mandate
+# that re-explains any of them is duplicated text competing with itself. Write only
+# what is specific to THIS pod.
+#
+#
+# ── INVARIANTS A MANDATE CANNOT OVERRIDE ────────────────────────────────────
+#
+#   * No absolute dates reach the model. The whole brief is date-scrubbed and ages are
+#     rendered relative ("formed 22 days ago"). A date is the single token that most
+#     helps a model recall the period instead of reading the evidence.
+#   * `disagreement`, `override`, coverage and staleness are COMPUTED from the board,
+#     never asked of the model. Asking would make an auditable number a matter of
+#     opinion and would let a unanimous panel be reported as split. Do not write a
+#     mandate that asks the PM to report any of them.
+#   * A driver the PM did not answer on stays out of the result. It is never filled
+#     with 0.0, which would fabricate an abstention and be scored as a real flat call.
+#   * Entries naming a driver the pod does not own, or one that was not on the board
+#     at this meeting, are dropped; convictions outside [-1, 1] are clamped.
+#
+#
+# ── THE LINE A MANDATE MUST NOT CROSS ───────────────────────────────────────
+#
+# A mandate says how to weigh a panel of opinions and how to resolve them into one
+# trade. It must NOT encode a rule tuned to observed results — no "the labour analyst
+# has been unreliable", no thresholds picked because they backtested well. Everything
+# judgmental here is DECLARED IN ADVANCE and never fitted, the same discipline the
+# polarity signs below are held to. Fitting the mandate to outcomes converts the whole
+# layer from a forecast into a curve fit.
+#
+#
+# ── BUDGET ──────────────────────────────────────────────────────────────────
+#
+# The prompt already carries up to seven full analyst reports, and the response now
+# carries the notes, four report fields, a driver block and a trade. Word ceilings live
+# in the tool schema. A mandate that ALSO demands length spends the budget on output
+# that would otherwise have gone into reasoning — keep each line short.
+#
+#
+# ── COMPARABILITY ───────────────────────────────────────────────────────────
+#
+# `clock_freq`, `board:` and the `listens_to` set are what make two pods comparable
+# head-to-head. Changing them is legitimate — pods may genuinely differ — but a
+# measured difference between two pods that differ in these fields is no longer
+# attributable to the mandate alone. If the point of a second pod is to test a
+# different philosophy, change `mandate`/`weighing`/`trade` and nothing else.
+
+
+display_name: "<pod name — one line, heads the system prompt>"
+
+# Month end. Five of the seven current analysts already grade on a month-end clock and
+# the other two publish monthly, so ME is the coarsest cadence on which every analyst
+# has a genuinely fresh opinion. Meeting weekly would re-serve the same monthly views
+# four times over and count them as four independent bets.
+clock_freq: ME
+
+# Which space this pod's per-driver convictions are expressed in. This binds BOTH the
+# calibration ladder in the system prompt AND the `conviction` field description in the
+# tool, so the two can never again say different things — which is the defect this key
+# exists to close (see the ANSWER_SPACES note in llm_pm.py).
+#
+#   driver  each conviction is about that driver's OWN headline measurement, the same
+#           quantity its analyst is scored on. The only setting under which `ic_pm` and
+#           `ic_analyst` are a like-for-like comparison. Default; prefer it.
+#   rate    each conviction is that driver's contribution to the rate axis — which way
+#           it pushes yields. `pm_bench` re-orients these through `polarity` before
+#           grading. Choose this only if the per-driver numbers really are meant to be
+#           a decomposition of one rate view rather than N driver views.
+#
+# A rates pod's mandate necessarily talks about yields. That does NOT mean it should
+# answer in rate space: the rate-axis synthesis has two homes already, `notes` and the
+# trade, and folding it into `drivers` as well is what destroyed the balance_sheet and
+# labour reads on the first duration run.
+answer_space: driver
+
+board:
+  # A view older than this is still used but is labelled STALE in the brief. Set above
+  # the structural maximum (the jobs report is ~22 days old at month end) so it fires
+  # on a real gap rather than on the normal cadence.
+  stale_after_days: 45
+  # Beyond this the view is withheld entirely and the driver reads as uncovered. A
+  # quarter-old opinion presented as current is worse than an acknowledged hole.
+  expire_after_days: 95
+
+# The drivers this pod TAKES A VIEW ON. This set is compiled into the submit tool as an
+# enum, so the PM structurally cannot opine on anything outside it.
+#
+# `polarity` projects each driver onto one axis so that agreement and disagreement mean
+# something across drivers that do not share an orientation. The axis for a rates pod is
+# UPWARD PRESSURE ON RATES: +1 when the driver rising is hawkish, -1 when it is dovish.
+# It is DECLARED, never fitted — deriving these signs from outcomes would convert a
+# measurement into a signal. It never reaches the model; it is used only to compute
+# `disagreement` and the mechanical control.
+#
+# The seven analysts that exist today, with their signs — copy the ones this pod wants:
+#
+#   inflation:              polarity: +1   # headline_cpi_yoy up = hotter inflation
+#   inflation_expectations: polarity: +1   # breakeven_10y up = higher expected inflation
+#   labor_tightness:        polarity: -1   # CAREFUL: the graded measurement is the
+#                                          # UNEMPLOYMENT RATE, so "up" is a LOOSER
+#                                          # labour market — dovish — despite the name.
+#   term_premium:           polarity: +1   # dgs10_level up = higher long-end yields
+#   financial_conditions:   polarity: +1   # nfci up = tighter financial conditions
+#   balance_sheet:          polarity: -1   # fed_assets up = balance-sheet expansion = easing
+#   curve_slope:            polarity: -1   # slope_2s10s up = steepening, typically easing
+listens_to:
+  <driver>:
+    polarity: 1
+
+# The drivers whose reports are RENDERED INTO THE BRIEF. `all` shows the whole panel;
+# a list shows those analysts; omit the field to default to `listens_to`.
+#
+# This is how a narrow-mandate pod still reads the full room: it SEES every analyst and
+# ANSWERS only for its own drivers. Widening `reads` beyond `listens_to` is free —
+# nothing outside `listens_to` can enter the pod's numbers, because the submit enum and
+# the disagreement calculation are both built from `listens_to` alone.
+reads: all
+
+# What this PM is asked to judge. One idea per line; they are joined in file order.
+mandate:
+  - "<what this PM is asked to judge, in one sentence>"
+  - "<its philosophy — what it privileges when the panel is ambiguous>"
+  - "<what it must NOT reason about>"
+
+# How to weigh the panel. Each key becomes one labelled line in the system prompt, in a
+# fixed order, so two pods' prompts differ only where their text differs. Add your own
+# keys if a mandate needs a dimension that is not here — unknown keys are rendered, not
+# dropped.
+weighing:
+  staleness:    "<what to do with a view labelled STALE, or formed weeks ago>"
+  disagreement: "<what a split panel means to this PM — resolve it, or stand aside>"
+  gaps:         "<what to do with an uncovered driver, and with the missing-inputs graph>"
+  override:     "<when this PM is entitled to depart from an analyst's own call>"
+
+# OMIT THIS WHOLE BLOCK for a driver-space-only pod: no trade is then requested and the
+# tool schema drops it entirely.
+#
+# `universe` is compiled into the tool as an enum, so the PM cannot name an instrument
+# outside it. Every instrument must come from the vendored FRED bundle or the trade has
+# no offline outcome to be scored against. Available: the full nominal Treasury curve —
+# DGS1MO, DGS3MO, DGS6MO, DGS1, DGS2, DGS3, DGS5, DGS7, DGS10, DGS20, DGS30 — plus
+# T10YIE (the 10y breakeven). WALCL and NFCI are DRIVERS, not instruments; do not list
+# them.
+#
+# SIGN CONVENTION: legs are signed weights on YIELDS, and the trade is scored as
+# sum(w_i * change in y_i) over the horizon. That is a signed bet on yield changes, not
+# a P&L — a positive score means the yields moved the way the trade said, nothing more.
+#
+# What nets the level out under THIS scoring is EQUAL AND OPPOSITE weights: a parallel
+# shift c scores (w_2 + w_10) * c, which vanishes exactly when w_2 = -w_10, leaving only
+# the slope. Duration-weighting is the cash-P&L convention — it scales the short leg UP
+# by its smaller DV01, so w_2 + w_10 != 0 and a parallel shift still scores. Do not ask
+# for duration-weighted legs while this scorer measures yield changes.
+#
+# A leg may also be a SPREAD series (T10YIE is nominal minus real). A spread has its
+# offsetting leg built in, so it is already level-neutral on its own: pairing it with an
+# outright does not hedge it, it changes what is being bet on.
+trade:
+  universe: [DGS2, DGS10]
+  max_legs: 2
+  mandate:
+    - "<what kind of trade resolves this pod's research — e.g. one RV curve trade>"
+    - "<what the trade must NOT be>"
+  # The tag vocabulary for `risks`. Compiled into the tool as an enum, so risks are
+  # countable across meetings and across pods without constraining what can be said in
+  # the prose alongside each tag.
+  risk_tags: [duration, curve, carry, liquidity, policy, positioning]

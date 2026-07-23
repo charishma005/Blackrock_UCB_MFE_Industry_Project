@@ -1,0 +1,59 @@
+# Analyst spec — market-implied inflation-expectations driver (10-year breakeven).
+#
+# Requires the T10YIE series, which is not in the default vendored set — run
+# `python scripts/fetch_fred.py T10YIE` (needs FRED_API_KEY) before this analyst can
+# run. T10YIE is the 10-year breakeven (nominal minus TIPS), a DAILY market series,
+# so the clock is resampled to month-end and feature windows are in TRADING DAYS
+# (21 ≈ 1 month, 63 ≈ 3 months, 252 ≈ 1 year). Distinct from realized CPI: this is
+# the market's forward expectation. See _TEMPLATE.yaml.
+
+display_name: "inflation expectations (10-year breakeven, T10YIE)"
+
+horizon:
+  kind: fixed
+  clock: T10YIE
+  clock_freq: ME
+  label: "month end, roughly one month ahead"
+  approx_days: 31
+
+mandate:
+  - "Judge whether market-implied inflation expectations are rising or falling, and how strongly."
+  - "The graded measurement is the 10-year breakeven: rising ('up') is higher expected inflation, falling is down."
+  - "This is the market's forward expectation embedded in prices, distinct from realized CPI."
+  - "Weigh the recent direction and the distance from the Committee's 2% objective."
+  - "Do not reason about realized inflation prints, the policy path, or any trade — only breakeven expectations."
+
+features:
+  level_feature: breakeven_10y
+
+  series:
+    - {name: breakeven_10y, source: T10YIE, op: level, unit: "%", history: 10,
+       description: "The 10-year breakeven inflation rate (10-year nominal yield minus 10-year TIPS yield), in percent."}
+
+  scalars:
+    - {name: be_change_21d, source: "@breakeven_10y", op: diff, window: 21, unit: "pp",
+       description: "breakeven_10y minus its value 21 trading days ago, in percentage points."}
+    - {name: be_change_63d, source: "@breakeven_10y", op: diff, window: 63, unit: "pp",
+       description: "breakeven_10y minus its value 63 trading days ago, in percentage points."}
+    - {name: be_change_252d, source: "@breakeven_10y", op: diff, window: 252, unit: "pp",
+       description: "breakeven_10y minus its value 252 trading days ago, in percentage points."}
+    - {name: be_distance_from_target, source: "@breakeven_10y", op: distance_from_reference, reference: 2.0, unit: "pp",
+       description: "breakeven_10y minus 2.0, in percentage points."}
+    - {name: be_12m_low, source: "@breakeven_10y", op: rolling_min, window: 252, unit: "%",
+       description: "The lowest breakeven_10y over the trailing 252 trading days."}
+    - {name: be_12m_high, source: "@breakeven_10y", op: rolling_max, window: 252, unit: "%",
+       description: "The highest breakeven_10y over the trailing 252 trading days."}
+    - {name: be_above_12m_low, sources: ["@breakeven_10y", "@be_12m_low"], op: spread, unit: "pp",
+       description: "breakeven_10y minus be_12m_low, in percentage points."}
+    - {name: be_range_width, sources: ["@be_12m_high", "@be_12m_low"], op: spread, unit: "pp",
+       description: "be_12m_high minus be_12m_low, in percentage points."}
+    - {name: be_range_position, sources: ["@be_above_12m_low", "@be_range_width"], op: ratio, unit: "0-1",
+       description: "be_above_12m_low divided by be_range_width; 0 at the trailing-12-month low, 1 at the high."}
+
+text_cues:
+  - "inflation expectations"
+  - "longer-term inflation"
+  - expectations
+  - anchored
+  - "longer-term"
+  - "longer run"
