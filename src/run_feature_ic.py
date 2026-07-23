@@ -21,7 +21,7 @@ import argparse
 import pandas as pd
 import yaml
 
-from src.data.fred_local import load_bundle
+from src.data.equity_local import load_any_bundle as load_bundle
 from src.layered.analysts.llm_analyst import PERSONA_DIR
 from src.layered.evaluation import FeaturePanel, ICEvaluator, release_dates, required_ic
 from src.layered.features import FeatureEngine, from_persona

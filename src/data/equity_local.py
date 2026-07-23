@@ -74,17 +74,20 @@ def load_bundle(series_ids: list[str], start: str | None = None,
 
 def load_any_bundle(series_ids: list[str], start: str | None = None,
                     end: str | None = None) -> dict[str, pd.Series]:
-    """Load a mixed bundle: ``EQ_*`` ids from here, all others from ``fred_local``.
+    """Load a mixed bundle: ``EQ_*`` ids from here, ``INTL_*`` ids from
+    ``intl_local``, all others from ``fred_local``.
 
     Lets a runner call ``load_any_bundle(list(analyst.inputs))`` without caring
-    whether the analyst is an equity persona or a FRED-macro one.
+    whether the analyst is an equity, international, or FRED-macro persona.
     """
-    from src.data import fred_local
+    from src.data import fred_local, intl_local
 
     out: dict[str, pd.Series] = {}
     for sid in series_ids:
         if sid.startswith(PREFIX):
             out[sid] = load_series(sid, start, end)
+        elif sid.startswith(intl_local.PREFIX):
+            out[sid] = intl_local.load_series(sid, start, end)
         else:
             out[sid] = fred_local.load_series(sid, start, end)
     return out
