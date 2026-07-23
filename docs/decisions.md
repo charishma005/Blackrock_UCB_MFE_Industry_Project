@@ -417,3 +417,31 @@ post-2024 collapse) is separate and unclosed.
 **Tests.** `tests/test_relevance_pm.py` (4): equal==mechanical, the predictive analyst gets more
 weight, warm-up zero-weight → equal fallback, and no-look-ahead (weights unchanged by later dates).
 Full suite 208 → 212.
+
+---
+
+## 2026-07-23 — The text channel is essential (none / cue / whole, two-stage) (`notebook §7.14`)
+
+**Decision.** Re-run the 6 trading-pod analysts with `--text-mode {none, cue, whole}` (numbers only /
+driver-partitioned FOMC text = the shipped board / the whole un-partitioned statement), same
+model/window/memory, and score two ways: analyst layer (own-IC, trade-IC) and end-to-end (each board
+combined by v0 → trade P&L). Motivated by v1 ≈ v0 (reports inert at the PM) and the phase-1 "number
+anchors, words inform" deck slide.
+
+**Result.** At the **analyst layer** the crude metric looked flat — own-IC ≈ 0.265 for all three, and
+|trade-IC| vs one axis ≈ 0.10 (cue) / 0.10 (none) / 0.09 (whole). This is **misleading**: it uses a
+single axis and drops the sign. The **end-to-end v0 trade P&L is the honest test**, and it reverses
+the read: **cue > none > whole**. duration cue +0.0215 vs none −0.0035 vs whole −0.0068; front_end
++0.0343 vs +0.0004 vs −0.0072; real +0.0242 vs +0.0229 vs +0.0162. Stripping text collapses v0's edge
+(duration negative, front_end zero); un-partitioning it is worse on every pod (contamination, no
+reaction-function bonus).
+
+**Conclusion.** The cued text is **essential, not inert** — it lives in the analyst's directional
+*number*, which carries downstream; the shipped partitioned-text design is **validated** and `whole`
+is a regression. This reconciles with numbers-only ≈ full (§7.11): the PM needs the analyst's number
+(text-improved), not the report prose. So the redundant parts of the pipeline are the LLM *PM* and the
+report *prose* — **not** the text. The lever is NOT "give the analyst whole text."
+
+**Caveat.** One LLM run per arm (the cue board is the pre-existing one, so run-to-run sampling noise is
+uncontrolled), t-stats ~1–2, and the analyst-layer proxy was crude. But cue > none holds on all three
+pods, the robustness the study relies on.
