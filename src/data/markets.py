@@ -35,6 +35,39 @@ PUBLICATION_LAG_DAYS: dict[str, int] = {
     # T10YIE / DFII10 are daily market series → publish same-day → default lag 0.
 }
 
+# The rigorous fix promised above: ALFRED's full revision history, queried with these
+# two sentinel values (FRED's own documented convention for "every realtime period
+# there has ever been"), returns one row per (reference date, realtime_start) — a new
+# row each time a value was revised. `fetch_fred_vintage` reduces that to each
+# observation's TRUE first-publication date, which `fred_local.load_series` prefers
+# over the fixed lag table above wherever a series has been vendored into
+# ``data/fred_vintage/`` (`scripts/fetch_fred_vintage.py`). A series not yet vendored
+# there keeps using the fixed lag, unchanged — covering a series with real vintage
+# data is additive, never a behavior change for the rest.
+_ALFRED_REALTIME_START = "1776-07-04"
+_ALFRED_REALTIME_END = "9999-12-31"
+
+
+def _first_release_dates_from_observations(observations: list[dict]) -> "pd.Series":
+    """Reduce a full ALFRED vintage history to each observation's first release.
+
+    Every time a value is revised, ALFRED emits a new row for the same reference
+    ``date`` with a later ``realtime_start``. The earliest ``realtime_start`` for a
+    given ``date`` is the day that print actually became public — the fact the fixed
+    per-series lag only approximates. Later revisions are deliberately discarded: this
+    answers "when could an analyst have known this existed", not "what did it turn
+    out to be" — pulled out as a pure function so it is testable without a network call.
+    """
+    first: dict[pd.Timestamp, pd.Timestamp] = {}
+    for o in observations:
+        if o.get("value") == ".":     # FRED's missing-observation sentinel
+            continue
+        d = pd.Timestamp(o["date"])
+        rt = pd.Timestamp(o["realtime_start"])
+        if d not in first or rt < first[d]:
+            first[d] = rt
+    return pd.Series(first, name="first_release_date").sort_index()
+
 
 def fetch_prices(symbols: list[str], start: str, end: str) -> pd.DataFrame:
     """Daily close prices via yfinance. Returns (date x symbol)."""
@@ -67,6 +100,34 @@ def fetch_fred(series_id: str, start: str, end: str, api_key: str | None = None)
     if lag:
         s.index = s.index + pd.Timedelta(days=lag)
     return s
+
+
+def fetch_fred_vintage(series_id: str, start: str, end: str,
+                       api_key: str | None = None) -> pd.Series:
+    """Each observation's TRUE first-publication date, from ALFRED's full vintage
+    history — the rigorous alternative to the fixed ``PUBLICATION_LAG_DAYS`` shift.
+
+    Returns a ``pd.Series`` indexed by observation (reference) date, valued by the
+    ``pd.Timestamp`` on which that observation first became public. This is what
+    ``scripts/fetch_fred_vintage.py`` vendors into ``data/fred_vintage/``, which
+    ``fred_local.load_series`` prefers over the fixed lag table whenever a series has
+    been fetched here.
+
+    Needs a ``FRED_API_KEY``; queried, not vendored automatically, exactly like
+    ``fetch_fred``. The full-revision-history query is a larger payload than a plain
+    observations call, so expect it to be slower per series.
+    """
+    key = api_key or os.environ.get("FRED_API_KEY")
+    if not key:
+        raise RuntimeError("Set FRED_API_KEY (free at fred.stlouisfed.org)")
+    r = requests.get(FRED_BASE, params={
+        "series_id": series_id, "api_key": key, "file_type": "json",
+        "observation_start": start, "observation_end": end,
+        "realtime_start": _ALFRED_REALTIME_START, "realtime_end": _ALFRED_REALTIME_END,
+        "output_type": 2,
+    }, timeout=60)
+    r.raise_for_status()
+    return _first_release_dates_from_observations(r.json()["observations"])
 
 
 def fetch_macro_bundle(series_ids: list[str], start: str, end: str) -> dict[str, pd.Series]:

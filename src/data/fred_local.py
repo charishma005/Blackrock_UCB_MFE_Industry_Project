@@ -11,9 +11,12 @@ One correctness note carries over from ``markets.fetch_fred``. These CSVs are
 indexed by *observation* date — the month the data describes — not by the date it
 was published. May CPI is stamped ``2026-05-01`` but was not released until mid
 June, so slicing ``.loc[:asof]`` on the raw index would hand an analyst a print
-weeks before the world had it. Every series is therefore shifted to its
-approximate release date on load, reusing the same lag table as the API path so
-the two sources agree.
+weeks before the world had it. Every series is therefore shifted to its release
+date on load: to its TRUE first-publication date when a vendored ALFRED vintage
+file exists for it (``data/fred_vintage/<id>.csv`` — see ``fred_vintage.py`` and
+``scripts/fetch_fred_vintage.py``), else to the same fixed-lag approximation the
+API path (``markets.PUBLICATION_LAG_DAYS``) uses, so the two sources still agree
+wherever neither has vintage data.
 
     from src.data.fred_local import load_series, load_bundle
     cpi = load_series("CPIAUCSL")                  # already release-dated
@@ -28,6 +31,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.data import fred_vintage
 from src.data.markets import PUBLICATION_LAG_DAYS
 
 # .../Blackrock_UCB_MFE_Industry_Project/src/data/fred_local.py -> parents[2] == repo root
@@ -53,7 +57,13 @@ def available() -> list[str]:
 
 
 def load_series(series_id: str, start: str | None = None, end: str | None = None) -> pd.Series:
-    """One FRED series, indexed by approximate *release* date (not observation date)."""
+    """One FRED series, indexed by release date (not observation date).
+
+    Prefers a vendored ALFRED vintage file for this series when one exists
+    (``fred_vintage.available()``) — each observation gets its TRUE first-publication
+    date rather than the fixed lag. Falls back to that fixed lag, unchanged, for any
+    series not yet vendored there.
+    """
     path = csv_dir() / f"{series_id}.csv"
     if not path.exists():
         raise FileNotFoundError(
@@ -68,17 +78,56 @@ def load_series(series_id: str, start: str | None = None, end: str | None = None
         name=series_id,
     ).dropna().sort_index()
 
-    # Shift observation date → release date so downstream `.loc[:asof]` slicing
-    # cannot see a print before it existed.
-    lag = PUBLICATION_LAG_DAYS.get(series_id, 0)
-    if lag:
-        s.index = s.index + pd.Timedelta(days=lag)
+    if series_id in fred_vintage.available():
+        s = _release_date_from_vintage(s, series_id)
+    else:
+        # Shift observation date → release date so downstream `.loc[:asof]` slicing
+        # cannot see a print before it existed.
+        lag = PUBLICATION_LAG_DAYS.get(series_id, 0)
+        if lag:
+            s.index = s.index + pd.Timedelta(days=lag)
 
     if start is not None:
         s = s.loc[pd.Timestamp(start):]
     if end is not None:
         s = s.loc[:pd.Timestamp(end)]
     return s
+
+
+def _release_date_from_vintage(s: pd.Series, series_id: str) -> pd.Series:
+    """Reindex an observation-dated series onto TRUE ALFRED release dates.
+
+    Falls back to the fixed per-series lag only for an observation the vintage file
+    does not cover (e.g. history predating the vintage file's own start) — partial
+    coverage must never silently drop those rows or leave them observation-dated,
+    either of which would be a bigger leak than the fixed-lag approximation this
+    function exists to replace.
+
+    ``s`` is sorted by observation date on entry. Real statistical agencies always
+    publish in reference-period order, so the resulting release-date index should
+    already be increasing; every rolling/diff/pct_change feature op in ``ops.py``
+    reads this index positionally as "oldest -> newest reference period", so if the
+    vendored vintage file ever produced an out-of-order result this refuses to
+    silently re-sort the series — that would compute every feature over the wrong
+    sequence — and raises instead.
+    """
+    release = fred_vintage.load_release_dates(series_id)
+    aligned = release.reindex(s.index)
+    if aligned.isna().any():
+        lag_days = PUBLICATION_LAG_DAYS.get(series_id, 0)
+        fallback = pd.Series(s.index + pd.Timedelta(days=lag_days), index=s.index)
+        aligned = aligned.fillna(fallback)
+    new_index = pd.DatetimeIndex(aligned)
+    if not new_index.is_monotonic_increasing:
+        raise ValueError(
+            f"{series_id}: ALFRED release dates in data/fred_vintage/{series_id}.csv "
+            f"are not increasing with observation date — refusing to reorder the "
+            f"series, since every rolling/diff feature op depends on this index "
+            f"staying in reference-period order. Inspect the vendored file."
+        )
+    out = s.copy()
+    out.index = new_index
+    return out
 
 
 def load_bundle(series_ids: list[str], start: str | None = None,
