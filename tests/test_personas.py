@@ -11,6 +11,8 @@ DRIVERS = [
     "balance_sheet", "financial_conditions", "inflation_expectations",
     # Equity drivers ported from macro-llm r7 (data/equity/ EQ_* series).
     "sector_breadth", "vol_regime", "positioning", "risk_appetite",
+    # International drivers (data/intl/ INTL_* series).
+    "ea_rates", "uk_rates", "jp_rates", "ea_equity", "uk_equity", "jp_equity",
 ]
 
 

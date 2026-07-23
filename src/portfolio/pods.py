@@ -106,6 +106,12 @@ class PMPods:
             asset_classes=(AssetClass.RATES, AssetClass.EQUITY, AssetClass.COMMODITY),
             listens_to=("positioning", "vol_regime", "inflation"),
         ),
+        PMPod(
+            "global_macro",
+            asset_classes=(AssetClass.RATES, AssetClass.EQUITY),
+            listens_to=("ea_rates", "uk_rates", "jp_rates",
+                        "ea_equity", "uk_equity", "jp_equity"),
+        ),
     ])
 
     @property

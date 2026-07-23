@@ -34,6 +34,8 @@ KNOWN_DRIVERS: tuple[str, ...] = (
     "inflation", "curve_slope", "term_premium", "financial_conditions",
     "labor_tightness", "inflation_expectations", "balance_sheet",
     "sector_breadth", "vol_regime", "risk_appetite", "positioning",
+    # International drivers (data/intl/ INTL_* series + per-bank text corpora).
+    "ea_rates", "uk_rates", "jp_rates", "ea_equity", "uk_equity", "jp_equity",
 )
 
 # Lazily-built replay analysts, cached across rebalance dates.
