@@ -380,3 +380,40 @@ every arm sits at t<2 on n≈48 and the weight correlations are 4–5-point rank
 pilot evidence, not a result. **Next:** a full-window relevance-prior run on duration + front_end
 for a clean P&L read, and a learned walk-forward relevance weight as the mechanical alternative if
 the prompt gain does not hold.
+
+---
+
+## 2026-07-23 — v0 mechanical relevance combiner + v1 hybrid (`src/layered/pm/relevance_pm.py`, `hybrid_pm.py`)
+
+**Decision.** Split signal *generation* (LLM analysts) from signal *combination* (mechanical), the
+standard alpha-combination pattern. **v0** (`relevance_pm.py`) weights each analyst's oriented view
+by its **walk-forward trailing IC to the traded instrument** (its trade relevance), not by
+conviction — fixing the confidence-vs-relevance mis-weight (§7.10) with arithmetic, not prompting.
+The weighting is pluggable (`equal, ic, ir, rank_topk, ridge`); **ic** is the pre-registered
+primary. **v1** (`hybrid_pm.py`) is anchor-and-adjust: v0 sets the baseline weight, an LLM may nudge
+each by a bounded, report-justified multiplier in [0.5, 2.0] — making the report load-bearing by
+construction. Both write the mechanical JSONL schema and are scored by `trade_pnl` head-to-head.
+
+**Result (full window 2016–2025, `notebook §7.12–7.13`).** **v0 works.** `ic` roughly *doubles* the
+mean trade P&L over the mechanical baseline on all three trading pods (duration +0.0215 vs +0.0105;
+front_end +0.0343 vs +0.0163; real +0.0242 vs +0.0129) and is the **first arm in the study to clear
+t≈2** (real ic t=2.02; real/duration rank_topk ~2.0). Sanity holds: `equal` reproduces mechanical
+exactly, `ridge` overfits at N=5/T≈120 (worst everywhere). **v1 ≈ v0** — the LLM adjustment is
+marginally better on duration (+0.0243), *worse* on front_end (+0.0285 vs v0 +0.0343), identical on
+real (+0.0246). So even with the weighting fixed and the report's job narrowed to "adjust the prior,"
+the reports do **not** add value: the dilution hypothesis is not confirmed.
+
+**Conclusion.** The alpha is the **mechanical relevance weighting (v0)**, deterministic, auditable,
+free. The LLM's value in this pipeline is *signal generation* at the analyst layer, not combination
+or adjustment. Ship v0; keep v1 as a documented negative result. curve (opposed pod) abstains
+mechanically and is excluded from the trade head-to-head.
+
+**Caveat.** Relevance is estimated from ~12 obs/yr, so the trailing IC is noisy (hence shrinkage),
+and the 5-scheme sweep invites multiple-comparisons — `ic` was pre-registered to avoid cherry-picking
+`rank_topk`. Walk-forward is enforced (weight at t uses only outcomes realized before t), but the
+board it reads is LLM-analyst output, so the analyst-layer cutoff-leak question (`§7.9` shows no
+post-2024 collapse) is separate and unclosed.
+
+**Tests.** `tests/test_relevance_pm.py` (4): equal==mechanical, the predictive analyst gets more
+weight, warm-up zero-weight → equal fallback, and no-look-ahead (weights unchanged by later dates).
+Full suite 208 → 212.

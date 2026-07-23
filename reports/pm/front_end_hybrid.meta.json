@@ -1,0 +1,201 @@
+{
+  "config": {
+    "pod": "front_end",
+    "board": "reports/ab",
+    "board_suffix": "_on",
+    "start": "2016-01-01",
+    "end": "2025-12-31",
+    "limit": null,
+    "model": "claude-sonnet-5",
+    "max_tokens": 1500,
+    "weighting": "ic",
+    "min_obs": 12,
+    "shrink_k": 8.0,
+    "no_identity_check": false,
+    "dry_run": false,
+    "out": "reports/pm/front_end_hybrid.jsonl"
+  },
+  "pod": "front_end",
+  "kind": "hybrid:ic",
+  "listens_to": [
+    "labor_tightness",
+    "inflation",
+    "financial_conditions",
+    "balance_sheet"
+  ],
+  "polarity": {
+    "labor_tightness": -1.0,
+    "inflation": 1.0,
+    "financial_conditions": 1.0,
+    "balance_sheet": -1.0
+  },
+  "clock_freq": "ME",
+  "answer_space": "driver",
+  "memory": false,
+  "board_thresholds": {
+    "stale_after_days": 45,
+    "expire_after_days": 95
+  },
+  "system_prompt": "You are the Front-end \u2014 near-term policy-pricing view (2y and in).\n\n- Judge whether the market should price more or less near-term Fed tightening over the horizon.\n- Weight the reaction-function drivers (labour, inflation) most; treat financial conditions and the balance sheet as the constraint around them.\n- Do not take a view beyond the front end (2y and in) \u2014 long-end and slope are other pods' seats.\n\nHow to weigh the panel:\n- staleness: A STALE labour or inflation read cuts hardest here since both drive the near-term path; discount toward no-view.\n- disagreement: Labour loosening while inflation stays hot is the live tension \u2014 resolve on which the reaction function weights now, do not average blindly.\n- gaps: Use the missing-inputs graph to catch a reaction-function call resting on an input only another analyst holds.\n- override: Override an analyst only where a cross-read changes the near-term path, never on the outright level.\n\nThe trade:\n- One front-end bet expressing more/less near-term tightening \u2014 a level shift or a front-end slope, all within 2y.\n- Must NOT reach beyond the 2y point.\n- Legs may only name these instruments: DGS3MO, DGS6MO, DGS1, DGS2.\n- Use at most 2 legs.\n\nYou are the discretionary layer of a hybrid PM. A mechanical combiner has already set a baseline weight for each analyst \u2014 how much that analyst's view has historically mattered for THIS trade (its walk-forward trade relevance). Do NOT re-weight from scratch and do NOT restate the mechanical view. Nudge a baseline weight ONLY where this month's report gives a concrete reason the history has not captured yet: a stale read, a regime shift, a one-off catalyst, or a report that flags its driver is about to matter more or less than usual. Return a multiplier in [0.5, 2.0] on each analyst's baseline weight (1.0 = leave it), each with a one-line reason pointing at that analyst's report. Default to 1.0 \u2014 only deviate with a report-grounded reason. You cannot change a sign, drop a driver, or add one.",
+  "n_meetings": 120,
+  "window": [
+    "2016-01-31",
+    "2025-12-31"
+  ],
+  "board_sources": {
+    "balance_sheet": {
+      "path": "reports/ab/balance_sheet_on.jsonl",
+      "sha256": "6154d8220a11ee15f36ce6ea09fee48b7ef76ef5e4139e7855b9449a6d153631",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "balance_sheet",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/balance_sheet_on.jsonl"
+      },
+      "clock": "WALCL",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "curve_slope": {
+      "path": "reports/ab/curve_slope_on.jsonl",
+      "sha256": "9e9b46685e84a0039fc032e0bb30604367fb3ab331d55cd55a4ce41639d641b3",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "curve_slope",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/curve_slope_on.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "financial_conditions": {
+      "path": "reports/ab/financial_conditions_on.jsonl",
+      "sha256": "02e93034112dbc66a0572e9871413b106c13b351b715c5e23f20ff11851952d1",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "financial_conditions",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/financial_conditions_on.jsonl"
+      },
+      "clock": "NFCI",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation_expectations": {
+      "path": "reports/ab/inflation_expectations_on.jsonl",
+      "sha256": "d55ea8eea84ebcf077a8fc8f867dc536bc33be02209c05ae953f1a02927a931c",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation_expectations",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/inflation_expectations_on.jsonl"
+      },
+      "clock": "T10YIE",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation": {
+      "path": "reports/ab/inflation_on.jsonl",
+      "sha256": "8d5bc058a208007075290b61df9b71f6f3c39cee03620f3555247b13f3c4c22c",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/inflation_on.jsonl"
+      },
+      "clock": "CPIAUCSL",
+      "horizon_label": "the next monthly CPI release (roughly one month ahead)"
+    },
+    "labor_tightness": {
+      "path": "reports/ab/labor_tightness_on.jsonl",
+      "sha256": "442f4dea4a9dec161b40f74abb1b1e06cc6876ad0d29466bbe32bf77a03d3fcb",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "labor_tightness",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/labor_tightness_on.jsonl"
+      },
+      "clock": "UNRATE",
+      "horizon_label": "the next monthly jobs report (roughly one month ahead)"
+    },
+    "term_premium": {
+      "path": "reports/ab/term_premium_on.jsonl",
+      "sha256": "bafb200d1944fe864df2df97d09cba650736c6dcbd4586a7dabed56a2b1c86a6",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "term_premium",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/term_premium_on.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    }
+  }
+}
