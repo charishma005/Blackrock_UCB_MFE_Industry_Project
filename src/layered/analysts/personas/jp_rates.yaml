@@ -43,8 +43,8 @@ features:
        description: "2-year JGB yield minus its value 4 weeks earlier."}
     - {name: jgb10y_change_4w, source: "@jgb10y_level", op: diff, window: 4, unit: "pp",
        description: "10-year JGB yield minus its value 4 weeks earlier."}
-    - {name: jpyusd_change_4w, source: INTL_JPYUSD, op: pct_change, window: 4, unit: "fraction",
-       description: "JPYUSD spot divided by its value 4 weeks earlier, minus 1."}
+    - {name: jpyusd_change_4w, source: INTL_JPYUSD, op: pct_change, window: 4, unit: "%",
+       description: "Percent change of JPYUSD spot versus its value 4 weeks earlier."}
 
 text_corpus: data/boj/documents.jsonl
 

@@ -40,8 +40,8 @@ features:
        description: "2-year Schatz yield minus its value 4 weeks earlier."}
     - {name: bund10y_change_4w, source: "@bund10y_level", op: diff, window: 4, unit: "pp",
        description: "10-year Bund yield minus its value 4 weeks earlier."}
-    - {name: eurusd_change_4w, source: INTL_EURUSD, op: pct_change, window: 4, unit: "fraction",
-       description: "EURUSD spot divided by its value 4 weeks earlier, minus 1."}
+    - {name: eurusd_change_4w, source: INTL_EURUSD, op: pct_change, window: 4, unit: "%",
+       description: "Percent change of EURUSD spot versus its value 4 weeks earlier."}
 
 text_corpus: data/ecb/documents.jsonl
 

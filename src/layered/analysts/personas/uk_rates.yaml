@@ -42,8 +42,8 @@ features:
        description: "2-year gilt yield minus its value 4 weeks earlier."}
     - {name: gilt10y_change_4w, source: "@gilt10y_level", op: diff, window: 4, unit: "pp",
        description: "10-year gilt yield minus its value 4 weeks earlier."}
-    - {name: gbpusd_change_4w, source: INTL_GBPUSD, op: pct_change, window: 4, unit: "fraction",
-       description: "GBPUSD spot divided by its value 4 weeks earlier, minus 1."}
+    - {name: gbpusd_change_4w, source: INTL_GBPUSD, op: pct_change, window: 4, unit: "%",
+       description: "Percent change of GBPUSD spot versus its value 4 weeks earlier."}
 
 text_corpus: data/boe/documents.jsonl
 

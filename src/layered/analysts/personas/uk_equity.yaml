@@ -34,16 +34,16 @@ features:
        description: "13-week rolling standard deviation of weekly index returns, annualized with sqrt(52)."}
 
   scalars:
-    - {name: mom_4w, source: "@ftse_level", op: pct_change, window: 4, unit: "fraction",
-       description: "Index level divided by its value 4 weeks earlier, minus 1."}
-    - {name: mom_12w, source: "@ftse_level", op: pct_change, window: 12, unit: "fraction",
-       description: "Index level divided by its value 12 weeks earlier, minus 1."}
+    - {name: mom_4w, source: "@ftse_level", op: pct_change, window: 4, unit: "%",
+       description: "Percent change of the index level versus its value 4 weeks earlier."}
+    - {name: mom_12w, source: "@ftse_level", op: pct_change, window: 12, unit: "%",
+       description: "Percent change of the index level versus its value 12 weeks earlier."}
     - {name: ma_26w, source: "@ftse_level", op: moving_average, window: 26, unit: "index points",
        description: "26-week moving average of the index level."}
     - {name: index_vs_ma26, sources: ["@ftse_level", "@ma_26w"], op: ratio, unit: "ratio",
        description: "Index level divided by its 26-week moving average."}
-    - {name: gbpusd_change_4w, source: INTL_GBPUSD, op: pct_change, window: 4, unit: "fraction",
-       description: "GBPUSD spot divided by its value 4 weeks earlier, minus 1."}
+    - {name: gbpusd_change_4w, source: INTL_GBPUSD, op: pct_change, window: 4, unit: "%",
+       description: "Percent change of GBPUSD spot versus its value 4 weeks earlier."}
 
 text_corpus: data/boe/documents.jsonl
 
