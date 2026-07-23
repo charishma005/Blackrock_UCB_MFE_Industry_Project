@@ -1,0 +1,39 @@
+# Analyst spec — S&P 500 futures positioning and investor crowding.
+#
+# Ported from macro-llm's r7 single-driver equity agent. Features-only (see the
+# note in vol_regime.yaml). Features are vendored EQ_* weekly series
+# (data/equity/) built from the CFTC COT report with the publication lag
+# (usable_from = report Tuesday + 10 days) already baked in — so the vendored
+# value on a given Friday is the most recent report a trader could have acted on.
+# A LIVE run is a NEW experiment; the validated r7 signal is replayed by
+# src/portfolio/replay_analyst.py.
+
+display_name: "S&P 500 futures positioning and investor crowding"
+
+horizon:
+  kind: fixed
+  clock: EQ_AMGR_Z
+  clock_freq: null
+  label: "one week ahead (the next weekly close)"
+  approx_days: 7
+
+mandate:
+  - "Judge whether asset-manager net positioning is building or unwinding over the coming week, and how strongly."
+  - "The graded measurement is asset_mgr_z: 'up' means asset managers ADD net longs (the z-score RISES)."
+  - "Weigh the level of asset-manager and leveraged-fund net positioning versus their trailing year, and the recent 4-week change in each — crowded extremes can mean-revert."
+  - "Do not reason about other drivers or any trade — only positioning and crowding."
+
+features:
+  level_feature: asset_mgr_z
+  series:
+    - {name: asset_mgr_z, source: EQ_AMGR_Z, op: level, unit: "std devs", history: 13,
+       description: "Asset managers' net S&P futures position, as a 52-week z-score."}
+    - {name: asset_mgr_change_4w, source: EQ_AMGR_CHG4, op: level, unit: "std devs", history: 13,
+       description: "Asset managers' 4-week net-position change, in trailing-year standard deviations."}
+    - {name: lev_fund_z, source: EQ_LEV_Z, op: level, unit: "std devs", history: 13,
+       description: "Leveraged funds' net S&P futures position, as a 52-week z-score."}
+    - {name: lev_fund_change_4w, source: EQ_LEV_CHG4, op: level, unit: "std devs", history: 13,
+       description: "Leveraged funds' 4-week net-position change, in trailing-year standard deviations."}
+
+text_cues:
+  - "futures positioning"

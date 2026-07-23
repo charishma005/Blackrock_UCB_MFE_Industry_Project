@@ -1,0 +1,34 @@
+# Analyst spec — equity sector rotation and market breadth.
+#
+# Ported from macro-llm's r7 single-driver equity agent. Features-only (see the
+# note in vol_regime.yaml). Features are vendored EQ_* weekly series
+# (data/equity/, already point-in-time). A LIVE run is a NEW experiment; the
+# validated r7 signal is replayed by src/portfolio/replay_analyst.py.
+
+display_name: "US equity sector rotation and market breadth"
+
+horizon:
+  kind: fixed
+  clock: EQ_BREADTH_PCT
+  clock_freq: null
+  label: "one week ahead (the next weekly close)"
+  approx_days: 7
+
+mandate:
+  - "Judge whether market breadth is broadening or narrowing over the coming week, and how strongly."
+  - "The graded measurement is breadth: 'up' means MORE sectors participate (breadth RISES)."
+  - "Weigh how many sectors trade above trend, the cyclical-vs-defensive tilt, and cross-sector dispersion."
+  - "Do not reason about other drivers or any trade — only sector rotation and breadth."
+
+features:
+  level_feature: breadth
+  series:
+    - {name: breadth, source: EQ_BREADTH_PCT, op: level, unit: "share 0-1", history: 13,
+       description: "Share of available GICS sectors trading above their trailing 26-week average."}
+    - {name: cyclical_minus_defensive_4w, source: EQ_CYCDEF_4W, op: level, unit: "return", history: 13,
+       description: "Cyclical basket minus defensive basket, trailing 4-week relative return."}
+    - {name: sector_dispersion_4w, source: EQ_SECTOR_DISP, op: level, unit: "stdev of returns", history: 13,
+       description: "Cross-sector standard deviation of trailing 4-week returns."}
+
+text_cues:
+  - "sector rotation"

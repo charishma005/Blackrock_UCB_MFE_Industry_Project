@@ -1,0 +1,59 @@
+{
+  "n_transport_errors": 0,
+  "n_parse_failures": 464,
+  "whole": {
+    "n_pre_cutoff": 169,
+    "quarter_acc": 0.7514792899408284,
+    "year_acc": 0.757396449704142,
+    "exact_acc": 0.7396449704142012,
+    "post_cutoff_anchor": {
+      "n": 3,
+      "quarter_acc": 0.0
+    },
+    "subperiods": {
+      "2005-2009": 0.625,
+      "2010-2019": 0.9625,
+      "2020-2025": 0.5208333333333334
+    }
+  },
+  "cue": {
+    "n_pre_cutoff": 1039,
+    "quarter_acc": 0.4013474494706448,
+    "year_acc": 0.5043310875842156,
+    "exact_acc": 0.35418671799807505,
+    "post_cutoff_anchor": {
+      "n": 13,
+      "quarter_acc": 0.0
+    },
+    "subperiods": {
+      "2005-2009": 0.40106951871657753,
+      "2010-2019": 0.4387947269303202,
+      "2020-2025": 0.346031746031746
+    },
+    "per_driver": {
+      "balance_sheet": 0.34959349593495936,
+      "curve_slope": 0.7337278106508875,
+      "financial_conditions": 0.30973451327433627,
+      "inflation": 0.41420118343195267,
+      "inflation_expectations": 0.13291139240506328,
+      "labor_tightness": 0.5283018867924528,
+      "term_premium": 0.2702702702702703
+    },
+    "drop_one_driver": {
+      "balance_sheet": 0.40829694323144106,
+      "curve_slope": 0.3367816091954023,
+      "financial_conditions": 0.41252699784017277,
+      "inflation": 0.3988505747126437,
+      "inflation_expectations": 0.44948921679909193,
+      "labor_tightness": 0.3784090909090909,
+      "term_premium": 0.42312008978675647
+    }
+  },
+  "verdict": {
+    "whole_band": "RECALL-SATURATED",
+    "cue_band": "PARTIAL",
+    "cue_materially_reduces": false,
+    "kill_cue_not_a_defense": true,
+    "kill_recall_concern_unsupported": false
+  }
+}

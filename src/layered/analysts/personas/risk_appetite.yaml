@@ -1,0 +1,37 @@
+# Analyst spec — cross-asset risk appetite (read from non-equity markets).
+#
+# Ported from macro-llm's r7 single-driver equity agent. Features-only (see the
+# note in vol_regime.yaml). Features are vendored EQ_* weekly series
+# (data/equity/, already point-in-time). NOTE: in r7 this driver's DATED arm was
+# RECALL-POTENT (the model minted alpha from the calendar alone) — the vendored
+# series here are date-blind, but any live run of this persona must stay date-blind
+# and be treated as a new, recall-aware experiment. The validated r7 signal is
+# replayed by src/portfolio/replay_analyst.py.
+
+display_name: "cross-asset risk appetite (metals, rates, and currencies)"
+
+horizon:
+  kind: fixed
+  clock: EQ_SLOPE_BP
+  clock_freq: null
+  label: "one week ahead (the next weekly close)"
+  approx_days: 7
+
+mandate:
+  - "Judge whether cross-asset risk appetite is improving or deteriorating over the coming week, and how strongly."
+  - "The graded measurement is curve_slope_bp: 'up' means the 10y-2y curve STEEPENS (slope rises), the growth-positive direction."
+  - "Weigh the copper/gold ratio's recent change, the level of the yield-curve slope, and the dollar's recent change — together these price growth confidence and risk premia."
+  - "Do not reason about other drivers or any trade — only cross-asset risk appetite."
+
+features:
+  level_feature: curve_slope_bp
+  series:
+    - {name: copper_gold_change_8w, source: EQ_CG_CHG8, op: level, unit: "8-wk % change", history: 13,
+       description: "Copper/gold price ratio, trailing 8-week percent change."}
+    - {name: curve_slope_bp, source: EQ_SLOPE_BP, op: level, unit: "basis points", history: 13,
+       description: "US Treasury 10-year minus 2-year yield, in basis points."}
+    - {name: dollar_change_8w, source: EQ_DXY_CHG8, op: level, unit: "8-wk % change", history: 13,
+       description: "US dollar index (DXY), trailing 8-week percent change."}
+
+text_cues:
+  - "risk appetite"

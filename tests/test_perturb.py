@@ -138,7 +138,13 @@ def test_change_token_set_matches_the_persona_namespace():
             if d.op in _MOMENTUM_OPS:
                 assert _is_change(d.name), f"{driver}:{d.name} ({d.op}) should be flipped"
             elif d.op in _LEVEL_OPS and d.name != spec.level_feature:
-                assert not _is_change(d.name), f"{driver}:{d.name} ({d.op}) must not flip"
+                # Vendored precomputed changes (EQ_*_CHG*, upstream-computed
+                # diffs read with op: level) ARE changes — the name-based flip
+                # is semantically right for them, so they are exempt from the
+                # level-must-not-flip rule.
+                vendored_change = any("_CHG" in s for s in (d.sources or ()))
+                assert vendored_change or not _is_change(d.name), \
+                    f"{driver}:{d.name} ({d.op}) must not flip"
 
 
 def test_rescale_scales_every_measurement():

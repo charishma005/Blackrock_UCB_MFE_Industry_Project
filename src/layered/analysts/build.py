@@ -14,37 +14,66 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
+
+import yaml
 
 from src.data.fomc_text import FomcCorpus
 from src.layered.analysts.carry_forward import CarryForward
-from src.layered.analysts.llm_analyst import LLMAnalyst
+from src.layered.analysts.llm_analyst import PERSONA_DIR, LLMAnalyst
 from src.layered.text import CueSelector, WholeDocumentSelector
+
+# .../src/layered/analysts/build.py -> parents[3] == repo root
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def build_selector(text_mode: str, text_doc: str = "statement",
-                   text_max_chars: int | None = None, *, verbose: bool = False):
-    """The FOMC text channel: cue-partitioned, whole-document control, or none."""
+                   text_max_chars: int | None = None, *,
+                   corpus_path: str | os.PathLike | None = None,
+                   verbose: bool = False):
+    """The text channel: cue-partitioned, whole-document control, or none.
+
+    ``corpus_path`` points at any documents.jsonl in the FOMC schema
+    (``doc_type``/``release_date``/``text``); None keeps the FOMC default, so
+    every pre-international persona behaves exactly as before.
+    """
     if text_mode == "none":
         return None
-    corpus = FomcCorpus(doc_type=text_doc, max_chars=text_max_chars)
+    corpus = FomcCorpus(doc_type=text_doc, path=corpus_path,
+                        max_chars=text_max_chars)
     cls = CueSelector if text_mode == "cue" else WholeDocumentSelector
     if verbose:
-        print(f"[info] {text_doc}s loaded: {corpus.count} docs, selector={text_mode} "
-              f"(point-in-time by release_date)", file=sys.stderr)
+        src = Path(corpus_path).parent.name if corpus_path else "fomc"
+        print(f"[info] {src} {text_doc}s loaded: {corpus.count} docs, "
+              f"selector={text_mode} (point-in-time by release_date)",
+              file=sys.stderr)
     return cls(corpus)
+
+
+def persona_corpus_path(driver: str) -> Path | None:
+    """The persona's declared ``text_corpus`` path (repo-root-relative), or
+    None for the FOMC default. Read here rather than in ``from_persona`` so
+    the analyst's own signature and the selector interface stay frozen."""
+    spec = yaml.safe_load((PERSONA_DIR / f"{driver}.yaml").read_text()) or {}
+    rel = spec.get("text_corpus")
+    return (_REPO_ROOT / rel) if rel else None
 
 
 def build_analyst(driver: str, llm, *, text_mode: str = "cue",
                   text_doc: str = "statement", text_max_chars: int | None = None,
                   describe_features: bool = False, use_memory: bool = False,
                   perturbation=None, verbose: bool = True) -> LLMAnalyst:
-    """An ``LLMAnalyst`` wired from its persona + the chosen text channel.
+    """An ``LLMAnalyst`` wired from its persona + that persona's text channel.
 
     ``perturbation`` is an evaluation-only leak/robustness arm (``src.layered.perturb``);
     ``None`` is the shipped path. The run script resolves the ``--perturb`` name to a
-    ``Perturbation`` and passes it through here.
+    ``Perturbation`` and passes it through here. The text corpus comes from the
+    persona's ``text_corpus`` field (per-bank corpora for the international
+    analysts), falling back to the FOMC default.
     """
-    selector = build_selector(text_mode, text_doc, text_max_chars, verbose=verbose)
+    selector = build_selector(text_mode, text_doc, text_max_chars,
+                              corpus_path=persona_corpus_path(driver),
+                              verbose=verbose)
     return LLMAnalyst.from_persona(driver, llm=llm, text_selector=selector,
                                    describe_features=describe_features,
                                    use_memory=use_memory, perturbation=perturbation)
