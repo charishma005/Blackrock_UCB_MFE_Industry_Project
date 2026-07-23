@@ -32,12 +32,61 @@ from __future__ import annotations
 from typing import Literal, Optional
 
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # A driver moves up, down, or is going nowhere. This is a statement about the
 # DRIVER (inflation, the 2y rate, ...), NOT about any tradeable instrument — the
 # separation of driver-space from instrument-space is the analyst/PM boundary.
 DriverDirection = Literal["up", "down", "flat"]
+
+
+class MissingInput(BaseModel):
+    """Evidence an analyst was never handed, named as another driver's territory.
+
+    Distinct from ``falsifier``, which is future-conditional — what would flip a
+    view once it arrives. This is a statement about the *completeness* of the
+    evidence set at the time of writing: "I am judging services inflation without
+    any read on wages." Structured rather than prose because the PM layer is meant
+    to route on it — the set of these across a meeting is a driver-to-driver
+    dependency graph, which is exactly what an isolated analyst cannot see and a
+    PM must.
+
+    Naming another driver here is legitimate and is NOT cross-driver drift; the
+    drift check reads the report prose only.
+    """
+
+    driver: str                                  # one of the persona names
+    why: str = ""                                # what it would settle, ≤ 20 words
+
+
+class DiscountedAnalyst(BaseModel):
+    """An analyst the PM deliberately set aside, and why.
+
+    The negative space of ``ArbitratedView.leaned_on``, and the more diagnostic of the
+    two: ``override`` already measures *how far* the PM moved the panel, but nothing
+    else records *which* analysts it chose not to follow. Without this, a PM that
+    quietly ignores a stale labour view is indistinguishable from one that weighed it
+    and was unpersuaded.
+
+    Structured rather than prose for the same reason ``MissingInput`` is — the driver
+    name is meant to be joined against the board, not read.
+    """
+
+    driver: str                                  # one of the persona names
+    why: str = ""                                # why it was set aside, ≤ 20 words
+
+
+class Risk(BaseModel):
+    """One thing the PM knows could go wrong, in prose plus a countable tag.
+
+    The prose is unconstrained because a risk worth naming rarely fits a taxonomy
+    picked before any mandate existed. The tag is drawn from the pod's declared
+    ``trade.risk_tags`` and exists so risks can be counted across meetings and across
+    pods without constraining what can be said about them.
+    """
+
+    text: str                                    # the risk, in a sentence
+    tag: str = ""                                # from the pod's declared risk_tags
 
 
 class DriverView(BaseModel):
@@ -69,6 +118,9 @@ class DriverView(BaseModel):
     report: str = ""
     key_evidence: list[str] = Field(default_factory=list)  # feature names leaned on
     falsifier: str = ""                          # what would change this view
+    # What the analyst was never given. Optional with a default like the rest of this
+    # block, which is what keeps every pre-existing run file loadable.
+    missing_inputs: list[MissingInput] = Field(default_factory=list)
     source: str = ""                             # "llm:inflation", "benchmark:persistence"
     degraded: bool = False                       # emitted after a failure — exclude from grading
     # Re-emitted unchanged because no evidence moved since the previous meeting. Not
@@ -192,7 +244,52 @@ class ArbitratedView(BaseModel):
     disagreement: float = 0.0                    # 0 = unanimous, 1 = maximally split
     notes: str = ""
 
+    # ── report-era fields ───────────────────────────────────────────────────
+    # A PM writes a report for the same reason an analyst does: the layer above reads
+    # prose, and the numbers alone do not say what was weighed. Mirrors DriverView's
+    # report block one layer up — where the analyst cites *measurements*, the PM cites
+    # *analysts*. All optional with defaults, so every pre-existing run file loads.
+    #
+    # There is deliberately NO second prose field here. ``notes`` is the report. An
+    # earlier draft added ``report`` alongside it and would have re-created the failure
+    # the tool schema is now shaped against: given two overlapping prose fields the
+    # model collapses its whole answer into one of them, taking the structured fields
+    # with it (see ``llm_pm._OUTPUT_CONTRACT``). Every field below is structured, so
+    # none of them competes with ``notes`` for the same content.
+    leaned_on: list[str] = Field(default_factory=list)          # analysts that moved it
+    discounted: list[DiscountedAnalyst] = Field(default_factory=list)
+    falsifier: str = ""                          # what would flip the reconciled read
+    # How much the PM trusts its own reconciliation — NOT a restatement of coverage or
+    # disagreement, both of which are computed from the board. This is the PM's read on
+    # whether the panel it was handed supports an arbitration at all.
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    risks: list[Risk] = Field(default_factory=list)
+    # The trade this research resolves into, when the pod declares a `trade:` block.
+    # CARRIED, not redefined: StrategyTrade is the PM→fund boundary and belongs to the
+    # layer above, so the PM's working object holds one rather than replacing it.
+    trade: Optional["StrategyTrade"] = None
+
     model_config = {"arbitrary_types_allowed": True}
+
+    @field_validator("trade", mode="before")
+    @classmethod
+    def _revive_trade_asof(cls, v):
+        """Let a dumped trade be loaded back.
+
+        ``asof`` is a ``pd.Timestamp`` under ``arbitrary_types_allowed``, so pydantic
+        will not coerce the ISO string ``model_dump(mode="json")`` produced. A caller
+        reloading a top-level view handles that itself (``{**dumped, "asof":
+        pd.Timestamp(...)}``) but cannot reach a *nested* trade, so a saved
+        ``ArbitratedView`` would dump cleanly and then refuse to load — the worst shape
+        of bug, since it only surfaces on replay.
+
+        Fixed here rather than on ``StrategyTrade`` deliberately: that model is the
+        PM→fund boundary owned by the layer above, and its shape is unchanged by this.
+        """
+        if isinstance(v, dict) and not isinstance(v.get("asof"), pd.Timestamp):
+            if v.get("asof") is not None:
+                return {**v, "asof": pd.Timestamp(v["asof"])}
+        return v
 
 
 class StrategyTrade(BaseModel):
@@ -208,7 +305,7 @@ class StrategyTrade(BaseModel):
     analyst's conviction) and is what the fund layer sizes against.
     """
 
-    strategy: str                                # e.g. "macro_rates"
+    strategy: str                                # the pod — e.g. "curve", "duration"
     asof: pd.Timestamp
     legs: dict[str, float]                       # instrument → signed weight
     conviction: float = Field(ge=0.0, le=1.0)
@@ -242,3 +339,9 @@ class FundAllocation(BaseModel):
     diagnostics: dict = Field(default_factory=dict)             # netting/vol/breadth
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+# ``ArbitratedView.trade`` forward-references ``StrategyTrade``, which is defined below
+# it — deliberately, so the reading order stays analyst → PM → fund. Resolve the
+# reference now that the name exists.
+ArbitratedView.model_rebuild()

@@ -36,11 +36,18 @@ def build_selector(text_mode: str, text_doc: str = "statement",
 
 def build_analyst(driver: str, llm, *, text_mode: str = "cue",
                   text_doc: str = "statement", text_max_chars: int | None = None,
-                  describe_features: bool = False, verbose: bool = True) -> LLMAnalyst:
-    """An ``LLMAnalyst`` wired from its persona + the chosen text channel."""
+                  describe_features: bool = False, use_memory: bool = False,
+                  perturbation=None, verbose: bool = True) -> LLMAnalyst:
+    """An ``LLMAnalyst`` wired from its persona + the chosen text channel.
+
+    ``perturbation`` is an evaluation-only leak/robustness arm (``src.layered.perturb``);
+    ``None`` is the shipped path. The run script resolves the ``--perturb`` name to a
+    ``Perturbation`` and passes it through here.
+    """
     selector = build_selector(text_mode, text_doc, text_max_chars, verbose=verbose)
     return LLMAnalyst.from_persona(driver, llm=llm, text_selector=selector,
-                                   describe_features=describe_features)
+                                   describe_features=describe_features,
+                                   use_memory=use_memory, perturbation=perturbation)
 
 
 def preflight_llm(model: str, *, max_tokens: int = 2000):

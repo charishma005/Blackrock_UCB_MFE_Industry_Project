@@ -117,6 +117,25 @@ display_name: "<pod name — one line, heads the system prompt>"
 # four times over and count them as four independent bets.
 clock_freq: ME
 
+# Which space this pod's per-driver convictions are expressed in. This binds BOTH the
+# calibration ladder in the system prompt AND the `conviction` field description in the
+# tool, so the two can never again say different things — which is the defect this key
+# exists to close (see the ANSWER_SPACES note in llm_pm.py).
+#
+#   driver  each conviction is about that driver's OWN headline measurement, the same
+#           quantity its analyst is scored on. The only setting under which `ic_pm` and
+#           `ic_analyst` are a like-for-like comparison. Default; prefer it.
+#   rate    each conviction is that driver's contribution to the rate axis — which way
+#           it pushes yields. `pm_bench` re-orients these through `polarity` before
+#           grading. Choose this only if the per-driver numbers really are meant to be
+#           a decomposition of one rate view rather than N driver views.
+#
+# A rates pod's mandate necessarily talks about yields. That does NOT mean it should
+# answer in rate space: the rate-axis synthesis has two homes already, `notes` and the
+# trade, and folding it into `drivers` as well is what destroyed the balance_sheet and
+# labour reads on the first duration run.
+answer_space: driver
+
 board:
   # A view older than this is still used but is labelled STALE in the brief. Set above
   # the structural maximum (the jobs report is ~22 days old at month end) so it fires

@@ -29,6 +29,7 @@ import pandas as pd
 from src.data.fred_local import load_bundle
 from src.layered.analysts import CarryForward, build_analyst, preflight_llm, print_run_audit
 from src.layered.evaluation import ICEvaluator, release_dates, required_ic
+from src.layered.perturb import ANALYST_NAMES, analyst_perturbation
 from src.layered.timeline import AsOf
 
 
@@ -48,13 +49,21 @@ def main():
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--describe-features", action="store_true",
                     help="show each feature's construction note (step-2 arm)")
+    ap.add_argument("--memory", action="store_true",
+                    help="replay the analyst's previous view back to it, so it grades "
+                         "its own last call against the release that scored it")
+    ap.add_argument("--perturb", default=None, choices=ANALYST_NAMES,
+                    help="evaluation-only leak/robustness arm: rewrite the evidence "
+                         "before the call (see src.layered.perturb). Off = shipped path.")
     ap.add_argument("--out", default="reports/analyst_ic.jsonl")
     args = ap.parse_args()
 
     llm = preflight_llm(args.model, max_tokens=args.max_tokens)
     analyst = build_analyst(args.driver, llm, text_mode=args.text_mode,
                             text_doc=args.text_doc,
-                            describe_features=args.describe_features)
+                            describe_features=args.describe_features,
+                            use_memory=args.memory,
+                            perturbation=analyst_perturbation(args.perturb))
     runner = CarryForward(analyst)
     macro = load_bundle(list(analyst.inputs))
 
@@ -101,13 +110,16 @@ def main():
             # series, so recomputing it is negligible next to an API call.
             features, text = analyst.build_inputs(world)
             analyst.last_raw = None
+            # Captured before the call: forming a view replaces the memory with today's,
+            # so reading it afterwards would log the wrong prompt in the audit trail.
+            memory_shown = analyst.memory
             v = runner.form_view(world)
             views.append(v)
 
             fh.write(json.dumps({
                 "asof": str(asof.date()),
                 "carried": v.carried,
-                "user_prompt": analyst._user_prompt(features, text),
+                "user_prompt": analyst._user_prompt(features, text, memory_shown),
                 "features": {
                     "series": {f.name: f.values for f in features.series},
                     "scalars": {f.name: f.value for f in features.scalars},

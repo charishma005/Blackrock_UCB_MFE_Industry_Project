@@ -5,6 +5,11 @@ display_name: "Curve — 2s10s slope view on the nominal Treasury curve"
 
 clock_freq: ME
 
+# Per-driver convictions are about each driver's OWN headline measurement, not its
+# effect on yields — the only setting under which ic_pm and ic_analyst compare
+# like for like. See the ANSWER_SPACES note in llm_pm.py.
+answer_space: driver
+
 board:
   stale_after_days: 45
   expire_after_days: 95
@@ -38,6 +43,9 @@ weighing:
 trade:
   universe: [DGS2, DGS10]
   max_legs: 2
+  # The equal-and-opposite rule below, in a form the grader can read. Prompt-inert —
+  # see the note in duration.yaml.
+  sign_convention: opposed
   mandate:
     - "One 2s10s trade: legs EQUAL AND OPPOSITE so a parallel shift nets out and only the slope remains."
     - "Must NOT be a directional duration bet."

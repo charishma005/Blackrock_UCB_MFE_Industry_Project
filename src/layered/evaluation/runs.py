@@ -20,13 +20,22 @@ import pandas as pd
 from src.layered.contracts import DriverView
 
 
-def _view_from(vd: dict) -> DriverView:
+def view_from(vd: dict) -> DriverView:
     """Rebuild a DriverView from its JSON dump. ``asof`` is coerced back to a
     Timestamp because the contract types it as one (``arbitrary_types_allowed`` means
-    pydantic checks the instance rather than parsing the ISO string)."""
+    pydantic checks the instance rather than parsing the ISO string).
+
+    Public because the PM layer's ``ViewBoard`` rebuilds views too and must not
+    re-implement this coercion — getting it wrong there would silently produce a
+    board indexed by strings, where the as-of gate's ``.loc[:meeting]`` slice would
+    compare lexically rather than chronologically.
+    """
     vd = dict(vd)
     vd["asof"] = pd.Timestamp(vd["asof"])
     return DriverView.model_validate(vd)
+
+
+_view_from = view_from      # pre-existing private name, kept so nothing breaks
 
 
 @dataclass
@@ -68,6 +77,7 @@ def load_run(path: str) -> Run:
         "report": [v.report or v.reasoning for v in views],
         "key_evidence": [list(v.key_evidence) for v in views],
         "falsifier": [v.falsifier for v in views],
+        "missing_inputs": [[m.driver for m in v.missing_inputs] for v in views],
     }, index=idx).sort_index()
 
     keep = ~df["degraded"]

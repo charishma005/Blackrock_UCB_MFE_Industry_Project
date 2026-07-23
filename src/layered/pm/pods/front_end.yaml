@@ -5,6 +5,11 @@ display_name: "Front-end — near-term policy-pricing view (2y and in)"
 
 clock_freq: ME
 
+# Per-driver convictions are about each driver's OWN headline measurement, not its
+# effect on yields — the only setting under which ic_pm and ic_analyst compare
+# like for like. See the ANSWER_SPACES note in llm_pm.py.
+answer_space: driver
+
 board:
   stale_after_days: 45
   expire_after_days: 95
