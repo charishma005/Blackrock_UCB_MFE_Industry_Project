@@ -27,7 +27,12 @@ listens_to:
   balance_sheet:
     polarity: -1            # fed_assets up = balance-sheet expansion = easing
 
-reads: all
+# Narrowed from `reads: all` (2026-07-22, first-final-results.md): on the fresh
+# board this pod was the one seat where LESS structure won — blind (one report,
+# t +2.73) and memory-off both beat full-panel arbitration, i.e. the wide brief
+# was diluting the reaction-function read, not informing it. Omitting `reads`
+# falls back to `listens_to`, so the PM now sees only the four drivers it owns.
+# The reversed experiment (re-widening) stays cheap: restore `reads: all`.
 
 mandate:
   - "Judge whether the market should price more or less near-term Fed tightening over the horizon."

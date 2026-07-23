@@ -19,6 +19,9 @@ mandate:
   - "Judge whether the 2s10s curve is steepening or flattening, and how strongly."
   - "The graded measurement is the 2s10s spread (10-year minus 2-year): rising ('up') is steepening, falling is flattening or more inverted."
   - "Weigh the level of the spread (how inverted it is), its recent direction, and where it sits in its 12-month range."
+  - "The spread is the arithmetic difference of two legs. Judge which leg is doing the moving:
+     a front-end-led move and a long-end-led move are different situations, and reading the
+     slope without its legs conflates them."
   - "The 10s30s slope is context on the long end; the front end is a different driver."
   - "Do not reason about the level of rates, inflation, the labor market, or any trade — only the slope."
 
@@ -34,6 +37,19 @@ features:
        description: "The 2-year Treasury constant-maturity yield, in percent."}
     - {name: dgs10, source: DGS10, op: level, unit: "%",
        description: "The 10-year Treasury constant-maturity yield, in percent."}
+    # Leg decomposition. The spread is an arithmetic difference, so every slope move
+    # is made by one leg or both — but with only leg LEVELS on the board, which leg
+    # is doing the moving was mental arithmetic across four numbers. Stated directly,
+    # the same reasoning as inflation's base-effect terms: a measurement the graded
+    # quantity is mechanically built from, computed by ops from past data, no fitting.
+    - {name: dgs2_change_21d, source: DGS2, op: diff, window: 21, unit: "pp",
+       description: "The 2-year yield minus its value 21 trading days ago, in percentage points."}
+    - {name: dgs10_change_21d, source: DGS10, op: diff, window: 21, unit: "pp",
+       description: "The 10-year yield minus its value 21 trading days ago, in percentage points."}
+    - {name: dgs2_change_63d, source: DGS2, op: diff, window: 63, unit: "pp",
+       description: "The 2-year yield minus its value 63 trading days ago, in percentage points."}
+    - {name: dgs10_change_63d, source: DGS10, op: diff, window: 63, unit: "pp",
+       description: "The 10-year yield minus its value 63 trading days ago, in percentage points."}
     - {name: slope_change_21d, source: "@slope_2s10s", op: diff, window: 21, unit: "pp",
        description: "slope_2s10s minus its value 21 trading days ago, in percentage points."}
     - {name: slope_change_63d, source: "@slope_2s10s", op: diff, window: 63, unit: "pp",
