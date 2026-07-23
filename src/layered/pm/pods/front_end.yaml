@@ -1,0 +1,49 @@
+# Front-end / policy pod — near-term Fed-pricing view, 2y and in.
+# See _TEMPLATE.yaml for the full field-by-field contract.
+
+display_name: "Front-end — near-term policy-pricing view (2y and in)"
+
+clock_freq: ME
+
+# Per-driver convictions are about each driver's OWN headline measurement, not its
+# effect on yields — the only setting under which ic_pm and ic_analyst compare
+# like for like. See the ANSWER_SPACES note in llm_pm.py.
+answer_space: driver
+
+board:
+  stale_after_days: 45
+  expire_after_days: 95
+
+# Rates axis, declared signs copied from the catalog. Labour and inflation are the
+# reaction-function drivers here; financial conditions and the balance sheet are the
+# constraint around them.
+listens_to:
+  labor_tightness:
+    polarity: -1            # graded on the UNEMPLOYMENT RATE: up = looser labour = dovish
+  inflation:
+    polarity: +1            # headline_cpi_yoy up = hotter inflation = hawkish
+  financial_conditions:
+    polarity: +1            # nfci up = tighter financial conditions
+  balance_sheet:
+    polarity: -1            # fed_assets up = balance-sheet expansion = easing
+
+reads: all
+
+mandate:
+  - "Judge whether the market should price more or less near-term Fed tightening over the horizon."
+  - "Weight the reaction-function drivers (labour, inflation) most; treat financial conditions and the balance sheet as the constraint around them."
+  - "Do not take a view beyond the front end (2y and in) — long-end and slope are other pods' seats."
+
+weighing:
+  staleness:    "A STALE labour or inflation read cuts hardest here since both drive the near-term path; discount toward no-view."
+  disagreement: "Labour loosening while inflation stays hot is the live tension — resolve on which the reaction function weights now, do not average blindly."
+  gaps:         "Use the missing-inputs graph to catch a reaction-function call resting on an input only another analyst holds."
+  override:     "Override an analyst only where a cross-read changes the near-term path, never on the outright level."
+
+trade:
+  universe: [DGS3MO, DGS6MO, DGS1, DGS2]
+  max_legs: 2
+  mandate:
+    - "One front-end bet expressing more/less near-term tightening — a level shift or a front-end slope, all within 2y."
+    - "Must NOT reach beyond the 2y point."
+  risk_tags: [duration, curve, carry, liquidity, policy, positioning]

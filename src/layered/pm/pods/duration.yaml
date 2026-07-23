@@ -1,0 +1,65 @@
+# Duration pod — directional LEVEL view on the nominal Treasury curve.
+# Copy of _TEMPLATE.yaml with this pod's six blocks filled in; the template carries the
+# full field-by-field contract, so this file only states what is specific to this pod.
+
+display_name: "Duration — directional level view on nominal Treasury yields"
+
+# Month end: the coarsest cadence on which every analyst has a genuinely fresh read.
+# Held identical across all four seats so the pods stay comparable head-to-head.
+clock_freq: ME
+
+# Which space the per-driver convictions are in. `driver` = each conviction is about that
+# driver's OWN headline measurement, which is what the analysts are scored on and so the
+# only setting under which `ic_pm` and `ic_analyst` are a like-for-like comparison. The
+# rate-axis synthesis this pod exists to produce belongs in `notes` and in the trade, not
+# folded into these numbers — see the note above ANSWER_SPACES in llm_pm.py for what
+# happened when the two halves of the prompt disagreed.
+answer_space: driver
+
+board:
+  stale_after_days: 45      # used but labelled STALE in the brief beyond this
+  expire_after_days: 95     # withheld entirely beyond this; the driver reads as uncovered
+
+# Axis = UPWARD PRESSURE ON RATES (hawkish = +1, dovish = -1). The signs are DECLARED,
+# copied verbatim from the analyst catalog, never fitted to outcomes. They never reach
+# the model — used only to compute `disagreement` and the mechanical control.
+listens_to:
+  inflation:
+    polarity: +1            # headline_cpi_yoy up = hotter inflation = hawkish
+  labor_tightness:
+    polarity: -1            # graded on the UNEMPLOYMENT RATE: up = looser labour = dovish
+  term_premium:
+    polarity: +1            # dgs10_level up = higher long-end yields
+  financial_conditions:
+    polarity: +1            # nfci up = tighter financial conditions
+  balance_sheet:
+    polarity: -1            # fed_assets up = balance-sheet expansion = easing
+
+# See the whole room; answer only for the drivers above.
+reads: all
+
+mandate:
+  - "Judge the net direction of nominal Treasury yields over the analysts' horizons."
+  - "Treat the level as the sum of forces; privilege drivers carrying a live, non-stale read over any single loud call."
+  - "Do not take a view on curve shape or on the real-vs-nominal split — those are other pods' seats."
+
+weighing:
+  staleness:    "Discount a STALE view toward abstention; never let one stale driver set the level alone."
+  disagreement: "A panel split on the rate axis is a weaker level signal — size down rather than pick a side on thin grounds."
+  gaps:         "Where the missing-inputs graph shows a driver judged without an input another analyst holds, lean on the better-informed read and flag the dependency."
+  override:     "Depart from an analyst's own call only when a named gap or a fresher cross-read contradicts it — never on preference."
+
+trade:
+  universe: [DGS2, DGS10]
+  max_legs: 2
+  # The same-sign rule below, in a form the grader can read. Nothing in the prompt path
+  # touches this key — `mandate._trade_block` renders only `mandate`, `universe` and
+  # `max_legs` — so it changes no prompt and cannot be enforced at emission time either:
+  # `duration` and `curve` share one instrument universe, so the tool enum that makes
+  # `real` and `front_end` structural cannot express duration-vs-curve. It exists so
+  # `evaluation.trade_pnl` can report how often the rule was actually kept.
+  sign_convention: same
+  mandate:
+    - "One directional duration bet: both legs the SAME sign so the net is a level view."
+    - "Must NOT be a curve trade — do not oppose the two legs."
+  risk_tags: [duration, curve, carry, liquidity, policy, positioning]

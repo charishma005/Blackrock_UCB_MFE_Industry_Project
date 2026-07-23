@@ -1,0 +1,51 @@
+# Real / breakeven pod — nominal-vs-inflation-compensation view at 10y.
+# See _TEMPLATE.yaml for the full field-by-field contract.
+
+display_name: "Real — 10y breakeven (inflation compensation) view"
+
+clock_freq: ME
+
+# Per-driver convictions are about each driver's OWN headline measurement, not its
+# effect on yields — the only setting under which ic_pm and ic_analyst compare
+# like for like. See the ANSWER_SPACES note in llm_pm.py.
+answer_space: driver
+
+board:
+  stale_after_days: 45
+  expire_after_days: 95
+
+# Rates axis, declared signs copied from the catalog. Both inflation drivers are +1 on
+# this axis; labour is -1 because it is graded on the unemployment rate.
+listens_to:
+  inflation:
+    polarity: +1            # headline_cpi_yoy up = hotter realised inflation
+  inflation_expectations:
+    polarity: +1            # breakeven_10y up = higher expected inflation
+  labor_tightness:
+    polarity: -1            # graded on the UNEMPLOYMENT RATE: up = looser labour = dovish
+
+reads: all
+
+mandate:
+  - "Judge whether 10y breakevens (inflation compensation) widen or narrow over the horizon."
+  - "Separate realised-inflation drivers from expectations drivers; weight the expectations read most where the two diverge."
+  - "Do not take a view on real yields or on the outright nominal level as such — only on the inflation wedge."
+
+weighing:
+  staleness:    "A STALE expectations read costs more here than a stale realised-inflation read; discount toward no-wedge-view."
+  disagreement: "Realised inflation hot while expectations stay anchored is the signature case — resolve toward the expectations driver, not a split."
+  gaps:         "If inflation persistence is judged with no wage/labour read the labour analyst holds, lean on that informed cross-read."
+  override:     "Override only when a cross-read reframes persistence vs base effects, never on a single hot print."
+
+# T10YIE alone, and one leg. T10YIE is nominal MINUS real, so the wedge is the entire
+# instrument and the trade is already level-neutral — there is no duration to hedge off.
+# Adding DGS10 as an offset would score d(nominal - real) - d(nominal) = -d(real), a
+# real-yield bet, which is the one thing the mandate above forbids. The universe is
+# narrowed rather than the instruction reworded so the tool enum makes it structural.
+trade:
+  universe: [T10YIE]
+  max_legs: 1
+  mandate:
+    - "One breakeven bet: +T10YIE if inflation compensation widens over the horizon, -T10YIE if it narrows."
+    - "Must NOT be a duration or real-yield bet — the wedge is the whole trade, not one leg of it."
+  risk_tags: [duration, curve, carry, liquidity, policy, positioning]

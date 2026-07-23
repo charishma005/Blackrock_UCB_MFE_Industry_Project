@@ -1,0 +1,52 @@
+# Curve pod — SLOPE view (2s10s) on the nominal Treasury curve.
+# See _TEMPLATE.yaml for the full field-by-field contract.
+
+display_name: "Curve — 2s10s slope view on the nominal Treasury curve"
+
+clock_freq: ME
+
+# Per-driver convictions are about each driver's OWN headline measurement, not its
+# effect on yields — the only setting under which ic_pm and ic_analyst compare
+# like for like. See the ANSWER_SPACES note in llm_pm.py.
+answer_space: driver
+
+board:
+  stale_after_days: 45
+  expire_after_days: 95
+
+# Same rates axis and the SAME declared signs as every other rates pod (UPWARD PRESSURE
+# ON RATES). curve_slope's -1 means a steepening reads as easing on this axis. Signs are
+# copied from the catalog, not re-derived for this seat.
+listens_to:
+  term_premium:
+    polarity: +1            # dgs10_level up = higher long-end yields
+  curve_slope:
+    polarity: -1            # slope_2s10s up = steepening = typically easing
+  balance_sheet:
+    polarity: -1            # fed_assets up = balance-sheet expansion = easing
+  labor_tightness:
+    polarity: -1            # graded on the UNEMPLOYMENT RATE: up = looser labour = dovish
+
+reads: all
+
+mandate:
+  - "Judge whether the 2s10s curve steepens or flattens over the horizon."
+  - "Read the outright level out and keep only the slope; privilege drivers that hit the long end and the front end differently."
+  - "Do not take a view on the outright level of yields — that is the Duration pod's seat."
+
+weighing:
+  staleness:    "A STALE long-end driver weakens a slope call more than a stale front-end one; discount toward no-slope-view."
+  disagreement: "Front-end and long-end drivers pulling the same way on the rate axis can still imply opposite slope — reconcile on slope, not level."
+  gaps:         "Use the missing-inputs graph to catch a slope call resting on an input only another analyst holds, and lean on the informed read."
+  override:     "Override an analyst only where a cross-read changes the front-vs-long balance, never on the level alone."
+
+trade:
+  universe: [DGS2, DGS10]
+  max_legs: 2
+  # The equal-and-opposite rule below, in a form the grader can read. Prompt-inert —
+  # see the note in duration.yaml.
+  sign_convention: opposed
+  mandate:
+    - "One 2s10s trade: legs EQUAL AND OPPOSITE so a parallel shift nets out and only the slope remains."
+    - "Must NOT be a directional duration bet."
+  risk_tags: [duration, curve, carry, liquidity, policy, positioning]

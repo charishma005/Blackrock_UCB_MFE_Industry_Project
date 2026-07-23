@@ -31,6 +31,7 @@ from src.layered.analysts import (
     preflight_llm,
     print_run_audit,
 )
+from src.layered.perturb import ANALYST_NAMES, analyst_perturbation
 from src.layered.timeline import AsOf
 
 
@@ -48,6 +49,9 @@ def main():
     ap.add_argument("--text-max-chars", type=int, default=None)
     ap.add_argument("--model", default="claude-haiku-4-5-20251001")
     ap.add_argument("--dry-run", action="store_true", help="print the prompt, make no call")
+    ap.add_argument("--perturb", default=None, choices=ANALYST_NAMES,
+                    help="evaluation-only leak/robustness arm — inspect a perturbed "
+                         "prompt with --dry-run (see src.layered.perturb)")
     ap.add_argument("--no-carry-forward", action="store_true",
                     help="call on every meeting even when the evidence has not changed "
                          "(re-asks an identical prompt; only useful to measure that churn)")
@@ -57,7 +61,8 @@ def main():
     llm = None if args.dry_run else preflight_llm(args.model)
 
     analyst = build_analyst(args.driver, llm, text_mode=args.text_mode,
-                            text_doc=args.text_doc, text_max_chars=args.text_max_chars)
+                            text_doc=args.text_doc, text_max_chars=args.text_max_chars,
+                            perturbation=analyst_perturbation(args.perturb))
     runner = analyst if args.no_carry_forward else CarryForward(analyst)
     macro = load_bundle(list(analyst.inputs))
     print(f"[info] driver={analyst.driver} inputs={analyst.inputs} "
