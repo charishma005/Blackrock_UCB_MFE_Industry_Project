@@ -363,3 +363,20 @@ is the pre-registration; the numbers are not yet in.
 **Tests.** `tests/test_pm_*` unchanged and green (59 pass) after the wiring — the arms default to
 the shipped path (`include_reports=True`, `relevance_prior=False`), so the existing runs reproduce
 byte-for-byte. A dedicated arm test is TODO once the pilot validates the direction.
+
+**Results (pilot, short window 2022–2025, n≈48, `notebook §7.11`).** *Closes the pre-registration
+above.* (1) **numbers-only ≈ full — the prose is NOT load-bearing.** Stripping the reports to
+`(direction, conviction)` labels leaves P&L comparable-to-slightly-better (duration −0.009 vs
+mem_on −0.005; front_end +0.012 vs +0.001; curve +0.003 vs −0.005; real −0.003 vs −0.007) and the
+own-driver-IC weighting unchanged (corr(weight, own-IC) 0.8–1.0, same as full). The PM's decision
+is a mechanical conviction pass-through; the analytical narrative is decorative for the trade. (2)
+**relevance-prior helps on the two directional pods** — duration +0.019 (t +0.91, vs mem_on −0.005)
+and front_end +0.030 (t +1.68, the best arm of any run) — and on **duration it rotated corr(weight,
+trade-IC) from −0.10 to +0.10**: the first evidence the confidence-vs-relevance mis-weight (§7.10)
+is *prompt-correctable* (H1 partially supported). It did **not** help curve (slope) or real
+(breakeven) — different axes than the rate-specific prior — and front_end's gain came *without*
+weight rotation (corr stayed −0.40), so a second channel (sizing/timing) also moves it. **Caveat:**
+every arm sits at t<2 on n≈48 and the weight correlations are 4–5-point rank corrs — directional
+pilot evidence, not a result. **Next:** a full-window relevance-prior run on duration + front_end
+for a clean P&L read, and a learned walk-forward relevance weight as the mechanical alternative if
+the prompt gain does not hold.
