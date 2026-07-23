@@ -35,6 +35,7 @@ from src.layered.evaluation.trade_pnl import summarize as summarize_trades
 from src.layered.pm.board import ViewBoard
 from src.layered.pm.disagreement import override, panel_disagreement
 from src.layered.pm.mechanical_pm import MechanicalPM
+from src.layered.pm.relevance_pm import WEIGHTINGS, RelevancePM
 
 
 def main():
@@ -46,16 +47,31 @@ def main():
     ap.add_argument("--end", default=None)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--no-identity-check", action="store_true")
+    ap.add_argument("--relevance", action="store_true",
+                    help="v0: weight analysts by walk-forward trade relevance, not conviction")
+    ap.add_argument("--weighting", default="ic", choices=list(WEIGHTINGS),
+                    help="relevance weighting scheme (with --relevance)")
+    ap.add_argument("--min-obs", type=int, default=12)
+    ap.add_argument("--shrink-k", type=float, default=8.0)
+    ap.add_argument("--topk", type=int, default=None)
+    ap.add_argument("--ridge-alpha", type=float, default=5.0)
     ap.add_argument("--out", default="reports/pm/pm_mech.jsonl")
     args = ap.parse_args()
 
-    pm = MechanicalPM.from_pod(args.pod)
+    if args.relevance:
+        pm = RelevancePM.from_pod(args.pod, weighting=args.weighting, min_obs=args.min_obs,
+                                  shrink_k=args.shrink_k, topk=args.topk, ridge_alpha=args.ridge_alpha)
+    else:
+        pm = MechanicalPM.from_pod(args.pod)
     board = ViewBoard.from_dir(args.board, args.board_suffix, drivers=pm.reads,
                               check_identity=not args.no_identity_check, **pm.board_kwargs)
 
     dates = board.meeting_dates(freq=pm.clock_freq, start=args.start, end=args.end)
     if args.limit:
         dates = dates[: args.limit]
+    if args.relevance:
+        from src.data.fred_local import load_bundle as _lb
+        pm.fit(board, dates, _lb(list(pm.trade_config.get("universe") or [])))
     print(f"[info] MECHANICAL pod={args.pod} drivers={pm.listens_to} "
           f"meetings={len(dates)} clock={pm.clock_freq}", file=sys.stderr)
 
@@ -65,7 +81,7 @@ def main():
         json.dump({
             "config": vars(args),
             "pod": args.pod,
-            "kind": "mechanical",
+            "kind": f"relevance:{args.weighting}" if args.relevance else "mechanical",
             "listens_to": pm.listens_to,
             "polarity": pm.polarity,
             "clock_freq": pm.clock_freq,
