@@ -1,0 +1,193 @@
+{
+  "config": {
+    "pod": "duration",
+    "board": "reports/ab",
+    "board_suffix": "_on",
+    "start": "2016-01-01",
+    "end": "2025-12-31",
+    "model": "claude-sonnet-5",
+    "max_tokens": 3000,
+    "max_report_words": null,
+    "limit": null,
+    "blind": null,
+    "no_identity_check": false,
+    "dry_run": false,
+    "out": "reports/pm/duration_on.jsonl"
+  },
+  "pod": "duration",
+  "listens_to": [
+    "inflation",
+    "labor_tightness",
+    "term_premium",
+    "financial_conditions",
+    "balance_sheet"
+  ],
+  "polarity": {
+    "inflation": 1.0,
+    "labor_tightness": -1.0,
+    "term_premium": 1.0,
+    "financial_conditions": 1.0,
+    "balance_sheet": -1.0
+  },
+  "clock_freq": "ME",
+  "board_thresholds": {
+    "stale_after_days": 45,
+    "expire_after_days": 95
+  },
+  "system_prompt": "You are the Duration \u2014 directional level view on nominal Treasury yields.\n\n- Judge the net direction of nominal Treasury yields over the analysts' horizons.\n- Treat the level as the sum of forces; privilege drivers carrying a live, non-stale read over any single loud call.\n- Do not take a view on curve shape or on the real-vs-nominal split \u2014 those are other pods' seats.\n\nHow to weigh the panel:\n- staleness: Discount a STALE view toward abstention; never let one stale driver set the level alone.\n- disagreement: A panel split on the rate axis is a weaker level signal \u2014 size down rather than pick a side on thin grounds.\n- gaps: Where the missing-inputs graph shows a driver judged without an input another analyst holds, lean on the better-informed read and flag the dependency.\n- override: Depart from an analyst's own call only when a named gap or a fresher cross-read contradicts it \u2014 never on preference.\n\nThe trade:\n- One directional duration bet: both legs the SAME sign so the net is a level view.\n- Must NOT be a curve trade \u2014 do not oppose the two legs.\n- Legs may only name these instruments: DGS2, DGS10.\n- Use at most 2 legs.\n\nUse the full conviction range, and use its sign:\n  +1.0 .. +0.6  the driver rises, clearly\n  +0.5 .. +0.1  the driver leans higher\n   0.0          no view, or the panel gives you nothing to go on\n  -0.1 .. -0.5  the driver leans lower\n  -0.6 .. -1.0  the driver falls, clearly\n\nYou are not required to have a view on every driver. Leaving a driver\nout is a legitimate answer when the panel gives you no basis for one, and is better\nthan a confident number you cannot justify from what you were shown.\n\nSubmit with the submit_arbitration tool. It has two separate\nfields and both are required:\n\n  \"notes\"    your reconciled read, in prose only. No numbers-as-JSON, no lists, no\n             per-driver entries \u2014 those do not belong in this field.\n  \"drivers\"  a JSON array with one entry per driver you took a view on.\n\nReason your way to the prose first and let the numbers follow from it, so each\nconviction is a conclusion rather than a label defended after the fact \u2014 but put the\nnumbers in \"drivers\", never in \"notes\". Give a conviction only for drivers you\nactually heard from at this meeting.\n\nThe remaining fields are each their own field too. Do not restate them inside \"notes\":\n\n  \"leaned_on\"   analysts that actually moved your view \u2014 names only\n  \"discounted\"  analysts you set aside, each with why\n  \"falsifier\"   what would flip this reconciled read\n  \"confidence\"  how far you trust this arbitration, 0 to 1\n  \"risks\"       what could go wrong, each a sentence plus one tag",
+  "disagreement": "pm.disagreement.panel_disagreement (computed, not asked)",
+  "n_meetings": 120,
+  "window": [
+    "2016-01-31",
+    "2025-12-31"
+  ],
+  "board_sources": {
+    "balance_sheet": {
+      "path": "reports/ab/balance_sheet_on.jsonl",
+      "sha256": "286ef5219ee9a143f4364973ad59dcb2b51210d73ad11abef97a20a129b17369",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "balance_sheet",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "out": "reports/ab/balance_sheet_on.jsonl"
+      },
+      "clock": "WALCL",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "curve_slope": {
+      "path": "reports/ab/curve_slope_on.jsonl",
+      "sha256": "875eabef1e5d83efd343af9d3a1c5ea58d89e0806ccc1154ee8ae41c51847d9e",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "curve_slope",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "out": "reports/ab/curve_slope_on.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "financial_conditions": {
+      "path": "reports/ab/financial_conditions_on.jsonl",
+      "sha256": "240469b97aba951395f276eda9bb6d645af2ca8d2d905f1ada58a1be0fddc503",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "financial_conditions",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "out": "reports/ab/financial_conditions_on.jsonl"
+      },
+      "clock": "NFCI",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation_expectations": {
+      "path": "reports/ab/inflation_expectations_on.jsonl",
+      "sha256": "ab284164d9595d697878776b2ffdc54986c7ab180f57bab09ea2cfff16151678",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation_expectations",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "out": "reports/ab/inflation_expectations_on.jsonl"
+      },
+      "clock": "T10YIE",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation": {
+      "path": "reports/ab/inflation_on.jsonl",
+      "sha256": "5d6d10ea70c9a485e01c3766264fc01f7a4091b4c4a2b41445d4db427fd55818",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "out": "reports/ab/inflation_on.jsonl"
+      },
+      "clock": "CPIAUCSL",
+      "horizon_label": "the next monthly CPI release (roughly one month ahead)"
+    },
+    "labor_tightness": {
+      "path": "reports/ab/labor_tightness_on.jsonl",
+      "sha256": "3bf8c72558a81aca419183d9c33076e882a486300fe19cb9be7777fedec192ca",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "labor_tightness",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "out": "reports/ab/labor_tightness_on.jsonl"
+      },
+      "clock": "UNRATE",
+      "horizon_label": "the next monthly jobs report (roughly one month ahead)"
+    },
+    "term_premium": {
+      "path": "reports/ab/term_premium_on.jsonl",
+      "sha256": "658064e9c2efe659be43cf0d9748f133602d58bf40186a6e9521a01a427ee73f",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "term_premium",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "out": "reports/ab/term_premium_on.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    }
+  }
+}
