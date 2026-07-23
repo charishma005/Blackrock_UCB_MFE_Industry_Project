@@ -313,3 +313,53 @@ against a synthetic multi-revision history; `load_series` preferring vintage dat
 fixed lag; the fixed-lag regression path for an unvendored series; per-row fallback under
 partial vintage coverage; the monotonicity guard against a corrupted vintage file; and
 `fred_vintage.available()`/`load_release_dates()` directly. Full suite 166 → 170.
+
+---
+
+## 2026-07-23 — Reasoning battery: is the PM's reasoning load-bearing? (`src/layered/pm/llm_pm.py`, `pm/brief.py`)
+
+**Finding that motivates it (results in `notebooks/pm_trade_evaluation.ipynb` §7, `docs/first-final-results.md`).**
+The fresh-board control matrix says the layered PM has **no P&L edge over the mechanical
+baseline** — it beats it on 0/3 pods with a baseline, and the earlier memory-on win (t=+1.73)
+did **not** replicate (t≈+0.83, mech now higher). Four convergent signals say the PM's elaborate
+prose is *not* driving the decision: (1) the **blind** arm — PM shown one report — is the only
+t>2 in the matrix (+2.73 on front_end) and *beats* full arbitration; (2) **scramble** of
+report→driver leaves the duration trade 74.5% direction-unchanged; (3) the PM weights by
+conviction and so leans on `balance_sheet` in 3/4 pods (loudest 52–62%, drop-one flips the trade
+27–37%); (4) **stated≠revealed** — the driver the prose emphasises matches the driver actually
+weighted only ~30% of the time. §7.10 pins the mechanism: **own-driver IC is ~inverted from
+trade relevance.** `balance_sheet` has own-driver IC 0.69 but IC-to-traded-yields ≈ 0/negative
+(−0.08/−0.10 across pods), while `labor_tightness` (own 0.155) is the *most* trade-relevant
+(+0.19/+0.23). Predictable == priced == untradable: the PM confidently loads the least-tradable
+axis.
+
+**Decision.** Add two evaluation arms to test whether reasoning is load-bearing and, if so,
+whether the mis-weight is correctable — rather than changing the inputs (the least-efficient
+lever; blind showed *more* input to the PM hurts).
+- **`--numbers-only`** (`include_reports=False`): `pm/brief.py:_entry_block` strips *all* analyst
+  text — report, falsifier, evidence names — leaving each analyst as its `(direction, conviction)`
+  label. H0: if numbers-only ≈ full-reports on P&L, the prose is decorative and the value (if any)
+  is in the structured numbers. Same brief renderer, so the arms differ only in what is shown.
+- **`--relevance-prior`** (`_RELEVANCE_PRIOR` appended to the system prompt): states as domain
+  knowledge — not the empirical IC numbers — that conviction measures certainty about a driver,
+  not its market impact; the near-term reaction function reprices yields while slow balance-sheet /
+  financial-conditions reads are largely priced. H1: if relevance-prior ≫ memory-on, the
+  confidence-vs-relevance mis-weight is correctable by telling the PM, and the reasoning *is*
+  usable. If it does not move, the fix must be mechanical (a learned, walk-forward relevance weight),
+  not prose.
+
+**Cost / alternative.** Rejected "more textual context to analysts" (§7.1 shows the analyst layer
+already carries trade-relevant signal in labor/inflation; the loss is at PM weighting, and the
+existing text channel's value is itself untested) and "full picture to the PM" (blind > full says
+more PM input hurts). Both are input-side; the binding constraint is the PM's aggregation. A
+walk-forward *learned* relevance weight is the principled version of `--relevance-prior` but risks
+look-ahead and is deferred until the cheap prompt arm shows whether the PM can reweight at all.
+
+**Status.** Pilot running now — numbers-only + relevance-prior × 4 pods, short window (2022-01-01
+→ 2025-12-31), sonnet, memory-on, 5-wide parallel pool, scored against the same fresh board as
+memory-on/off/mechanical. Results append here and as notebook §7.11 when the pool lands. This entry
+is the pre-registration; the numbers are not yet in.
+
+**Tests.** `tests/test_pm_*` unchanged and green (59 pass) after the wiring — the arms default to
+the shipped path (`include_reports=True`, `relevance_prior=False`), so the existing runs reproduce
+byte-for-byte. A dedicated arm test is TODO once the pilot validates the direction.
