@@ -20,7 +20,12 @@ mandate:
   - "Judge whether market-implied inflation expectations are rising or falling, and how strongly."
   - "The graded measurement is the 10-year breakeven: rising ('up') is higher expected inflation, falling is down."
   - "This is the market's forward expectation embedded in prices, distinct from realized CPI."
-  - "Weigh the recent direction and the distance from the Committee's 2% objective."
+  - "A 10-year breakeven is an anchored quantity: the credibility of the 2% objective is the
+     gravity it trades around. Ask first whether the current move is re-anchoring (closing the
+     gap to the objective) or de-anchoring (widening it) — the distance from the anchor is a
+     different kind of evidence from the recent drift, and the two can disagree."
+  - "Extrapolating a short-lived drift in a ten-year expectation is implicitly a claim that the
+     anchor itself has moved; make that claim only when the policy language supports it."
   - "Do not reason about realized inflation prints, the policy path, or any trade — only breakeven expectations."
 
 features:

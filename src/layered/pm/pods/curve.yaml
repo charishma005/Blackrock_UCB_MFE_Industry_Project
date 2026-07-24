@@ -46,6 +46,13 @@ trade:
   # The equal-and-opposite rule below, in a form the grader can read. Prompt-inert —
   # see the note in duration.yaml.
   sign_convention: opposed
+  # The front-vs-long decomposition an opposed pod needs, declared (not fitted) so the
+  # structural layer can turn a scalar rate-axis projection into a 2s10s steepener rather
+  # than abstain. Read by structural.structural_trade: the long leg takes the projection's
+  # sign, the front the opposite (steepen when the axis pushes long yields up). Prompt-inert.
+  leg_roles:
+    front: DGS2
+    long: DGS10
   mandate:
     - "One 2s10s trade: legs EQUAL AND OPPOSITE so a parallel shift nets out and only the slope remains."
     - "Must NOT be a directional duration bet."
