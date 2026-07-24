@@ -74,6 +74,16 @@ call, saying the same thing again is correct and should not be softened for vari
 Do not restate the previous view as though it were today's conclusion — re-derive the
 call from the measurements, using the prior view only to hold yourself to account."""
 
+_NEWS_CONTRACT = """You are also shown a market-nowcast block: a shared cross-asset
+news digest covering the target week and the two weeks before it, identical for
+every analyst — it is NOT partitioned to your driver the way your policy-language
+text is. Treat it as ambient background, not primary evidence: your report must
+still be grounded in your own measurements and your own policy language first. Use
+the nowcast only to sanity-check your call against the broader tape, or to note a
+cross-asset dynamic your own driver's data would not otherwise show you. If it
+conflicts with your own evidence, say so and explain which you weighted and why —
+do not let it override a call your own driver's data supports."""
+
 # Tool schema: forcing this tool is the model-agnostic way to guarantee a parseable
 # object. Field descriptions carry the same guidance the prose contract used to.
 SUBMIT_VIEW_TOOL = {
@@ -121,12 +131,19 @@ class LLMAnalyst:
                  horizon_days: int = 63, horizon_label: str = "the next observation",
                  horizon_clock: str | None = None, horizon_freq: str | None = None,
                  describe_features: bool = False, use_memory: bool = False,
+                 news_selector: TextSelector | None = None, use_news: bool = False,
                  perturbation=None):
         self.driver = driver
         self.persona = persona
         self.engine = engine
         self.llm = llm
         self.text_selector = text_selector
+        # The shared market-nowcast channel — one selector, reused by every analyst,
+        # orthogonal to ``text_selector`` (which is driver-partitioned). ``use_news``
+        # is the on/off switch: default False so the un-opted-in path reproduces the
+        # prompt exactly as before, the same convention ``use_memory`` follows below.
+        self.news_selector = news_selector
+        self.use_news = use_news
         # When True, each feature is shown with its construction note (what it IS).
         # The A/B knob for step 2 — off reproduces the un-described prompt exactly.
         self.describe_features = describe_features
@@ -162,7 +179,8 @@ class LLMAnalyst:
     @classmethod
     def from_persona(cls, driver: str, llm=None, text_selector: TextSelector | None = None,
                      persona_dir: Path | None = None, describe_features: bool = False,
-                     use_memory: bool = False, perturbation=None) -> "LLMAnalyst":
+                     use_memory: bool = False, news_selector: TextSelector | None = None,
+                     use_news: bool = False, perturbation=None) -> "LLMAnalyst":
         path = (persona_dir or PERSONA_DIR) / f"{driver}.yaml"
         if not path.exists():
             raise FileNotFoundError(f"no persona spec for driver {driver!r} at {path}")
@@ -181,6 +199,8 @@ class LLMAnalyst:
             horizon_freq=horizon.get("clock_freq"),
             describe_features=describe_features,
             use_memory=use_memory,
+            news_selector=news_selector,
+            use_news=use_news,
             perturbation=perturbation,
         )
 
@@ -257,6 +277,8 @@ class LLMAnalyst:
         )
         if self.use_memory:
             parts.append(_MEMORY_CONTRACT)
+        if self.use_news:
+            parts.append(_NEWS_CONTRACT)
         parts.append(_OUTPUT_CONTRACT)
         parts.append(_GAPS_CONTRACT)
         return "\n\n".join(parts)
@@ -284,6 +306,30 @@ class LLMAnalyst:
                          + scrub_dates(memory.falsifier))
         return "\n".join(lines)
 
+    @staticmethod
+    def _render_news(news: TextContext) -> str:
+        """The nowcast window, rendered directly rather than through
+        ``TextContext.render()`` — that method's header text ("Policy language on
+        this driver") is written for the FOMC/international channels and would
+        mislabel a shared, non-driver-specific digest. The data still travels as a
+        ``TextContext`` so it is inspectable and hashes into the evidence key the
+        same way every other channel does; only its final wording differs here."""
+        if not news.available:
+            return "(no market nowcast available yet)"
+        if news.is_empty:
+            return "(no market nowcast entries in this window)"
+        header = ("Market nowcast — shared cross-asset context, identical for every "
+                  "analyst (3-week window, most recent last):")
+        return header + "\n\n" + "\n\n".join(news.unchanged)
+
+    def _news_context(self, asof) -> TextContext | None:
+        """This meeting's nowcast window, or None when the channel is off/unset.
+        A thin wrapper so both ``_user_prompt`` and any caller inspecting the
+        evidence ask the selector the same way."""
+        if not self.use_news or self.news_selector is None:
+            return None
+        return self.news_selector.select(asof, [], self.driver)
+
     def _user_prompt(self, features: FeatureSet, text: TextContext,
                      memory: DriverView | None = None) -> str:
         """The evidence block. ``memory`` defaults to None so that every caller which
@@ -297,6 +343,9 @@ class LLMAnalyst:
             features.render(describe=self.describe_features),
             text.render(),
         ]
+        news = self._news_context(features.asof)
+        if news is not None:
+            blocks.append(self._render_news(news))
         if memory is not None:
             blocks.append(self._render_memory(memory))
         prompt = "\n\n".join(blocks)

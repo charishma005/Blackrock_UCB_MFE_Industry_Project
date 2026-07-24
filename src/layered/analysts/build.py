@@ -19,9 +19,10 @@ from pathlib import Path
 import yaml
 
 from src.data.fomc_text import FomcCorpus
+from src.data.nowcast_news import NowcastNewsCorpus
 from src.layered.analysts.carry_forward import CarryForward
 from src.layered.analysts.llm_analyst import PERSONA_DIR, LLMAnalyst
-from src.layered.text import CueSelector, WholeDocumentSelector
+from src.layered.text import CueSelector, NowcastNewsSelector, WholeDocumentSelector
 
 # .../src/layered/analysts/build.py -> parents[3] == repo root
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -50,6 +51,25 @@ def build_selector(text_mode: str, text_doc: str = "statement",
     return cls(corpus)
 
 
+def build_news_selector(use_news: bool, *, news_path: str | os.PathLike | None = None,
+                        news_weeks: int = 3, verbose: bool = False):
+    """The shared market-nowcast channel: one selector, reused by every analyst.
+
+    ``use_news`` is the on/off switch this exists for — False (the default) returns
+    None and every downstream call site treats that as "no news channel", so the
+    unopted-in path is unchanged. True builds one corpus and one selector, shared
+    across every ``build_analyst`` call in the same run rather than reloaded per
+    driver, since the window it serves does not vary by driver.
+    """
+    if not use_news:
+        return None
+    corpus = NowcastNewsCorpus(path=news_path, weeks=news_weeks)
+    if verbose:
+        print(f"[info] nowcast news loaded: {corpus.count} weekly entries, "
+              f"window={news_weeks}w (point-in-time by week)", file=sys.stderr)
+    return NowcastNewsSelector(corpus)
+
+
 def persona_corpus_path(driver: str) -> Path | None:
     """The persona's declared ``text_corpus`` path (repo-root-relative), or
     None for the FOMC default. Read here rather than in ``from_persona`` so
@@ -62,6 +82,8 @@ def persona_corpus_path(driver: str) -> Path | None:
 def build_analyst(driver: str, llm, *, text_mode: str = "cue",
                   text_doc: str = "statement", text_max_chars: int | None = None,
                   describe_features: bool = False, use_memory: bool = False,
+                  use_news: bool = False, news_selector=None,
+                  news_path: str | os.PathLike | None = None, news_weeks: int = 3,
                   perturbation=None, verbose: bool = True) -> LLMAnalyst:
     """An ``LLMAnalyst`` wired from its persona + that persona's text channel.
 
@@ -70,13 +92,24 @@ def build_analyst(driver: str, llm, *, text_mode: str = "cue",
     ``Perturbation`` and passes it through here. The text corpus comes from the
     persona's ``text_corpus`` field (per-bank corpora for the international
     analysts), falling back to the FOMC default.
+
+    ``use_news`` is the on/off switch for the shared market-nowcast channel
+    (default False — unopted-in runs reproduce the prompt exactly as before). Pass
+    an already-built ``news_selector`` when calling this once per driver in a loop,
+    so the nowcast file is parsed once for the whole population rather than once
+    per analyst; leave it None for a single ad-hoc build and it is constructed here.
     """
     selector = build_selector(text_mode, text_doc, text_max_chars,
                               corpus_path=persona_corpus_path(driver),
                               verbose=verbose)
+    if use_news and news_selector is None:
+        news_selector = build_news_selector(use_news, news_path=news_path,
+                                            news_weeks=news_weeks, verbose=verbose)
     return LLMAnalyst.from_persona(driver, llm=llm, text_selector=selector,
                                    describe_features=describe_features,
-                                   use_memory=use_memory, perturbation=perturbation)
+                                   use_memory=use_memory,
+                                   news_selector=news_selector, use_news=use_news,
+                                   perturbation=perturbation)
 
 
 def preflight_llm(model: str, *, max_tokens: int = 2000):

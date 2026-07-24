@@ -55,6 +55,12 @@ def main():
     ap.add_argument("--no-carry-forward", action="store_true",
                     help="call on every meeting even when the evidence has not changed "
                          "(re-asks an identical prompt; only useful to measure that churn)")
+    ap.add_argument("--news", action="store_true",
+                    help="add the shared market-nowcast channel: the target week plus "
+                         "the two weeks before it (data/news/nowcast_2024_2025.json), "
+                         "identical for every analyst. Off by default.")
+    ap.add_argument("--news-path", default=None,
+                    help="override the nowcast file (default: data/news/nowcast_2024_2025.json)")
     ap.add_argument("--out", default=None, help="write views as JSONL")
     args = ap.parse_args()
 
@@ -62,6 +68,7 @@ def main():
 
     analyst = build_analyst(args.driver, llm, text_mode=args.text_mode,
                             text_doc=args.text_doc, text_max_chars=args.text_max_chars,
+                            use_news=args.news, news_path=args.news_path,
                             perturbation=analyst_perturbation(args.perturb))
     runner = analyst if args.no_carry_forward else CarryForward(analyst)
     macro = load_bundle(list(analyst.inputs))
