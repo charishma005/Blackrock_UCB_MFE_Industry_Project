@@ -66,6 +66,12 @@ def main():
     ap.add_argument("--scramble-reports", dest="perturb", action="store_const",
                     const="scramble_reports",
                     help="alias for --perturb scramble_reports (the Han prior-vs-evidence probe)")
+    ap.add_argument("--numbers-only", action="store_true",
+                    help="reasoning arm: strip report prose, show only each analyst's "
+                         "(direction, conviction) — tests whether the reasoning is load-bearing")
+    ap.add_argument("--relevance-prior", action="store_true",
+                    help="reasoning arm: add a mandate note that conviction is not market "
+                         "impact (reaction function moves yields; balance sheet is priced)")
     ap.add_argument("--dry-run", action="store_true", help="print the prompt, make no call")
     ap.add_argument("--out", default="reports/pm/pm_run.jsonl")
     args = ap.parse_args()
@@ -73,7 +79,9 @@ def main():
     llm = None if args.dry_run else preflight_llm(args.model, max_tokens=args.max_tokens)
     pm = build_pm(args.pod, llm, max_report_words=args.max_report_words,
                   blind=args.blind, use_memory=args.memory,
-                  perturbation=pm_perturbation(args.perturb))
+                  perturbation=pm_perturbation(args.perturb),
+                  include_reports=not args.numbers_only,
+                  relevance_prior=args.relevance_prior)
     board = build_board(pm, args.board, args.board_suffix,
                         check_identity=not args.no_identity_check)
 
@@ -112,6 +120,8 @@ def main():
             # observation or one conditioned on the PM's own previous position.
             "answer_space": pm.answer_space,
             "memory": pm.use_memory,
+            "include_reports": pm.include_reports,
+            "relevance_prior": pm.relevance_prior,
             "board_thresholds": pm.board_kwargs,
             "system_prompt": pm._system_prompt(),
             "disagreement": "pm.disagreement.panel_disagreement (computed, not asked)",

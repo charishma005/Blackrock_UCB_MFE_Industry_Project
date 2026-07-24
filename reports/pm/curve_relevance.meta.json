@@ -1,0 +1,206 @@
+{
+  "config": {
+    "pod": "curve",
+    "board": "reports/ab",
+    "board_suffix": "_on",
+    "start": "2022-01-01",
+    "end": "2025-12-31",
+    "model": "claude-sonnet-5",
+    "max_tokens": 3000,
+    "max_report_words": null,
+    "limit": null,
+    "blind": null,
+    "memory": true,
+    "no_identity_check": false,
+    "perturb": null,
+    "numbers_only": false,
+    "relevance_prior": true,
+    "dry_run": false,
+    "out": "reports/pm/curve_relevance.jsonl"
+  },
+  "pod": "curve",
+  "listens_to": [
+    "term_premium",
+    "curve_slope",
+    "balance_sheet",
+    "labor_tightness"
+  ],
+  "polarity": {
+    "term_premium": 1.0,
+    "curve_slope": -1.0,
+    "balance_sheet": -1.0,
+    "labor_tightness": -1.0
+  },
+  "clock_freq": "ME",
+  "answer_space": "driver",
+  "memory": true,
+  "include_reports": true,
+  "relevance_prior": true,
+  "board_thresholds": {
+    "stale_after_days": 45,
+    "expire_after_days": 95
+  },
+  "system_prompt": "You are the Curve \u2014 2s10s slope view on the nominal Treasury curve.\n\n- Judge whether the 2s10s curve steepens or flattens over the horizon.\n- Read the outright level out and keep only the slope; privilege drivers that hit the long end and the front end differently.\n- Do not take a view on the outright level of yields \u2014 that is the Duration pod's seat.\n\nHow to weigh the panel:\n- staleness: A STALE long-end driver weakens a slope call more than a stale front-end one; discount toward no-slope-view.\n- disagreement: Front-end and long-end drivers pulling the same way on the rate axis can still imply opposite slope \u2014 reconcile on slope, not level.\n- gaps: Use the missing-inputs graph to catch a slope call resting on an input only another analyst holds, and lean on the informed read.\n- override: Override an analyst only where a cross-read changes the front-vs-long balance, never on the level alone.\n\nThe trade:\n- One 2s10s trade: legs EQUAL AND OPPOSITE so a parallel shift nets out and only the slope remains.\n- Must NOT be a directional duration bet.\n- Legs may only name these instruments: DGS2, DGS10.\n- Use at most 2 legs.\n\nWeight each analyst by how much its driver actually moves the\ninstrument you trade, not by how confident the analyst sounds. Conviction measures an\nanalyst's certainty about its own driver, which is not the same as that driver's market\nimpact \u2014 and the two often diverge: a driver that can be forecast with high conviction is\nusually one that moves slowly and is already anticipated and priced, so a confident read\non it carries little trading value. For rates, the near-term reaction function (labour and\ninflation) is what tends to reprice yields; slow balance-sheet and financial-conditions\nreadings are largely priced already. Down-weight a confident call on a slow, well-\nanticipated driver relative to a live read on a driver that actually repositions the\ncurve, and say in your notes which analysts you judged trade-relevant and why.\n\nUse the full conviction range, and use its sign. Each\nconviction is about THAT DRIVER'S OWN headline measurement \u2014 the number its analyst\ncovers \u2014 and nothing else:\n  +1.0 .. +0.6  the driver's own measurement rises, clearly\n  +0.5 .. +0.1  it leans higher\n   0.0          no view, or the panel gives you nothing to go on\n  -0.1 .. -0.5  it leans lower\n  -0.6 .. -1.0  it falls, clearly\n\nSome drivers move yields the OPPOSITE way from their own measurement: a shrinking\nbalance sheet pushes yields up, and a falling unemployment rate is a tighter labour\nmarket. Do not fold that inversion into these numbers. Report each driver's own\ndirection here, and put the rate-axis synthesis where it belongs \u2014 in \"notes\" and in\nthe trade.\n\nYou are not required to have a view on every driver. Leaving a driver\nout is a legitimate answer when the panel gives you no basis for one, and is better\nthan a confident number you cannot justify from what you were shown.\n\nYou have been shown the arbitration you made at the previous\nmeeting, including the position you are already carrying. Judge it before forming\ntoday's view: the panel in front of you now is the evidence that view was formed\nagainst.\n\nTwo things follow, and they pull in opposite directions on purpose.\n\nHold yourself to account. If the panel has moved against your previous read, say so\nplainly in the notes and let the numbers change. Repeating a call that the evidence has\nundercut is worse than reversing it.\n\nBut you are carrying a position, not writing on a blank page. Reversing or resizing it\ncosts something real, so it needs a reason you can name from THIS meeting's panel \u2014 a\ndriver that turned, a stale view refreshed, a gap closed. A single month's price move is\nnot on its own such a reason. If the panel says essentially what it said last time,\nleaving the position where it is is the correct answer, not a failure to have an\nopinion.\n\nThe trade block is the position you want to be carrying AFTER this meeting, not the\nchange you are making to it. So restate your existing legs to hold, give new ones to\nchange, and set \"flat\": true to carry nothing on purpose. Omitting the trade entirely\nsays you formed no position view at all \u2014 which is not the same as choosing to be\nflat, and is rarely what you mean once you are already carrying something.\n\nSubmit with the submit_arbitration tool. It has two separate\nfields and both are required:\n\n  \"notes\"    your reconciled read, in prose only. No numbers-as-JSON, no lists, no\n             per-driver entries \u2014 those do not belong in this field.\n  \"drivers\"  a JSON array with one entry per driver you took a view on.\n\nReason your way to the prose first and let the numbers follow from it, so each\nconviction is a conclusion rather than a label defended after the fact \u2014 but put the\nnumbers in \"drivers\", never in \"notes\". Give a conviction only for drivers you\nactually heard from at this meeting.\n\nThe remaining fields are each their own field too. Do not restate them inside \"notes\":\n\n  \"leaned_on\"   analysts that actually moved your view \u2014 names only\n  \"discounted\"  analysts you set aside, each with why\n  \"falsifier\"   what would flip this reconciled read\n  \"confidence\"  how far you trust this arbitration, 0 to 1\n  \"risks\"       what could go wrong, each a sentence plus one tag",
+  "disagreement": "pm.disagreement.panel_disagreement (computed, not asked)",
+  "n_meetings": 48,
+  "window": [
+    "2022-01-31",
+    "2025-12-31"
+  ],
+  "board_sources": {
+    "balance_sheet": {
+      "path": "reports/ab/balance_sheet_on.jsonl",
+      "sha256": "6154d8220a11ee15f36ce6ea09fee48b7ef76ef5e4139e7855b9449a6d153631",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "balance_sheet",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/balance_sheet_on.jsonl"
+      },
+      "clock": "WALCL",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "curve_slope": {
+      "path": "reports/ab/curve_slope_on.jsonl",
+      "sha256": "9e9b46685e84a0039fc032e0bb30604367fb3ab331d55cd55a4ce41639d641b3",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "curve_slope",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/curve_slope_on.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "financial_conditions": {
+      "path": "reports/ab/financial_conditions_on.jsonl",
+      "sha256": "02e93034112dbc66a0572e9871413b106c13b351b715c5e23f20ff11851952d1",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "financial_conditions",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/financial_conditions_on.jsonl"
+      },
+      "clock": "NFCI",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation_expectations": {
+      "path": "reports/ab/inflation_expectations_on.jsonl",
+      "sha256": "d55ea8eea84ebcf077a8fc8f867dc536bc33be02209c05ae953f1a02927a931c",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation_expectations",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/inflation_expectations_on.jsonl"
+      },
+      "clock": "T10YIE",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation": {
+      "path": "reports/ab/inflation_on.jsonl",
+      "sha256": "8d5bc058a208007075290b61df9b71f6f3c39cee03620f3555247b13f3c4c22c",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/inflation_on.jsonl"
+      },
+      "clock": "CPIAUCSL",
+      "horizon_label": "the next monthly CPI release (roughly one month ahead)"
+    },
+    "labor_tightness": {
+      "path": "reports/ab/labor_tightness_on.jsonl",
+      "sha256": "442f4dea4a9dec161b40f74abb1b1e06cc6876ad0d29466bbe32bf77a03d3fcb",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "labor_tightness",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/labor_tightness_on.jsonl"
+      },
+      "clock": "UNRATE",
+      "horizon_label": "the next monthly jobs report (roughly one month ahead)"
+    },
+    "term_premium": {
+      "path": "reports/ab/term_premium_on.jsonl",
+      "sha256": "bafb200d1944fe864df2df97d09cba650736c6dcbd4586a7dabed56a2b1c86a6",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "term_premium",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/term_premium_on.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    }
+  }
+}

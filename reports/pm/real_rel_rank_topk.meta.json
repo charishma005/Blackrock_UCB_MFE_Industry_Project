@@ -1,0 +1,200 @@
+{
+  "config": {
+    "pod": "real",
+    "board": "reports/ab",
+    "board_suffix": "_on",
+    "start": "2016-01-01",
+    "end": "2025-12-31",
+    "limit": null,
+    "no_identity_check": false,
+    "relevance": true,
+    "weighting": "rank_topk",
+    "min_obs": 12,
+    "shrink_k": 8.0,
+    "topk": null,
+    "ridge_alpha": 5.0,
+    "out": "reports/pm/real_rel_rank_topk.jsonl"
+  },
+  "pod": "real",
+  "kind": "relevance:rank_topk",
+  "listens_to": [
+    "inflation",
+    "inflation_expectations",
+    "labor_tightness"
+  ],
+  "polarity": {
+    "inflation": 1.0,
+    "inflation_expectations": 1.0,
+    "labor_tightness": -1.0
+  },
+  "clock_freq": "ME",
+  "answer_space": "driver",
+  "memory": false,
+  "board_thresholds": {
+    "stale_after_days": 45,
+    "expire_after_days": 95
+  },
+  "system_prompt": "RELEVANCE PM (v0) \u2014 a deterministic combiner that weights each analyst's oriented view by a walk-forward estimate of its trade relevance (weighting scheme is configurable), instead of by conviction. Warm-up / all-cold meetings fall back to the equal-weight panel mean (= the mechanical baseline). No look-ahead: weights at t use only outcomes realized before t; nothing is fitted to the future.\n\npod: real\nweighting: rank_topk min_obs: 12 shrink_k: 8.0 topk: None ridge_alpha: 5.0\nrule: single/level pod \u2014 representative leg sign(rate-axis projection)",
+  "disagreement": "pm.disagreement.panel_disagreement (computed, not asked)",
+  "n_meetings": 120,
+  "window": [
+    "2016-01-31",
+    "2025-12-31"
+  ],
+  "board_sources": {
+    "balance_sheet": {
+      "path": "reports/ab/balance_sheet_on.jsonl",
+      "sha256": "6154d8220a11ee15f36ce6ea09fee48b7ef76ef5e4139e7855b9449a6d153631",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "balance_sheet",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/balance_sheet_on.jsonl"
+      },
+      "clock": "WALCL",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "curve_slope": {
+      "path": "reports/ab/curve_slope_on.jsonl",
+      "sha256": "9e9b46685e84a0039fc032e0bb30604367fb3ab331d55cd55a4ce41639d641b3",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "curve_slope",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/curve_slope_on.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "financial_conditions": {
+      "path": "reports/ab/financial_conditions_on.jsonl",
+      "sha256": "02e93034112dbc66a0572e9871413b106c13b351b715c5e23f20ff11851952d1",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "financial_conditions",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/financial_conditions_on.jsonl"
+      },
+      "clock": "NFCI",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation_expectations": {
+      "path": "reports/ab/inflation_expectations_on.jsonl",
+      "sha256": "d55ea8eea84ebcf077a8fc8f867dc536bc33be02209c05ae953f1a02927a931c",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation_expectations",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/inflation_expectations_on.jsonl"
+      },
+      "clock": "T10YIE",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation": {
+      "path": "reports/ab/inflation_on.jsonl",
+      "sha256": "8d5bc058a208007075290b61df9b71f6f3c39cee03620f3555247b13f3c4c22c",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/inflation_on.jsonl"
+      },
+      "clock": "CPIAUCSL",
+      "horizon_label": "the next monthly CPI release (roughly one month ahead)"
+    },
+    "labor_tightness": {
+      "path": "reports/ab/labor_tightness_on.jsonl",
+      "sha256": "442f4dea4a9dec161b40f74abb1b1e06cc6876ad0d29466bbe32bf77a03d3fcb",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "labor_tightness",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/labor_tightness_on.jsonl"
+      },
+      "clock": "UNRATE",
+      "horizon_label": "the next monthly jobs report (roughly one month ahead)"
+    },
+    "term_premium": {
+      "path": "reports/ab/term_premium_on.jsonl",
+      "sha256": "bafb200d1944fe864df2df97d09cba650736c6dcbd4586a7dabed56a2b1c86a6",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "term_premium",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "cue",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/term_premium_on.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    }
+  }
+}

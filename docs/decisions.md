@@ -313,3 +313,135 @@ against a synthetic multi-revision history; `load_series` preferring vintage dat
 fixed lag; the fixed-lag regression path for an unvendored series; per-row fallback under
 partial vintage coverage; the monotonicity guard against a corrupted vintage file; and
 `fred_vintage.available()`/`load_release_dates()` directly. Full suite 166 → 170.
+
+---
+
+## 2026-07-23 — Reasoning battery: is the PM's reasoning load-bearing? (`src/layered/pm/llm_pm.py`, `pm/brief.py`)
+
+**Finding that motivates it (results in `notebooks/pm_trade_evaluation.ipynb` §7, `docs/first-final-results.md`).**
+The fresh-board control matrix says the layered PM has **no P&L edge over the mechanical
+baseline** — it beats it on 0/3 pods with a baseline, and the earlier memory-on win (t=+1.73)
+did **not** replicate (t≈+0.83, mech now higher). Four convergent signals say the PM's elaborate
+prose is *not* driving the decision: (1) the **blind** arm — PM shown one report — is the only
+t>2 in the matrix (+2.73 on front_end) and *beats* full arbitration; (2) **scramble** of
+report→driver leaves the duration trade 74.5% direction-unchanged; (3) the PM weights by
+conviction and so leans on `balance_sheet` in 3/4 pods (loudest 52–62%, drop-one flips the trade
+27–37%); (4) **stated≠revealed** — the driver the prose emphasises matches the driver actually
+weighted only ~30% of the time. §7.10 pins the mechanism: **own-driver IC is ~inverted from
+trade relevance.** `balance_sheet` has own-driver IC 0.69 but IC-to-traded-yields ≈ 0/negative
+(−0.08/−0.10 across pods), while `labor_tightness` (own 0.155) is the *most* trade-relevant
+(+0.19/+0.23). Predictable == priced == untradable: the PM confidently loads the least-tradable
+axis.
+
+**Decision.** Add two evaluation arms to test whether reasoning is load-bearing and, if so,
+whether the mis-weight is correctable — rather than changing the inputs (the least-efficient
+lever; blind showed *more* input to the PM hurts).
+- **`--numbers-only`** (`include_reports=False`): `pm/brief.py:_entry_block` strips *all* analyst
+  text — report, falsifier, evidence names — leaving each analyst as its `(direction, conviction)`
+  label. H0: if numbers-only ≈ full-reports on P&L, the prose is decorative and the value (if any)
+  is in the structured numbers. Same brief renderer, so the arms differ only in what is shown.
+- **`--relevance-prior`** (`_RELEVANCE_PRIOR` appended to the system prompt): states as domain
+  knowledge — not the empirical IC numbers — that conviction measures certainty about a driver,
+  not its market impact; the near-term reaction function reprices yields while slow balance-sheet /
+  financial-conditions reads are largely priced. H1: if relevance-prior ≫ memory-on, the
+  confidence-vs-relevance mis-weight is correctable by telling the PM, and the reasoning *is*
+  usable. If it does not move, the fix must be mechanical (a learned, walk-forward relevance weight),
+  not prose.
+
+**Cost / alternative.** Rejected "more textual context to analysts" (§7.1 shows the analyst layer
+already carries trade-relevant signal in labor/inflation; the loss is at PM weighting, and the
+existing text channel's value is itself untested) and "full picture to the PM" (blind > full says
+more PM input hurts). Both are input-side; the binding constraint is the PM's aggregation. A
+walk-forward *learned* relevance weight is the principled version of `--relevance-prior` but risks
+look-ahead and is deferred until the cheap prompt arm shows whether the PM can reweight at all.
+
+**Status.** Pilot running now — numbers-only + relevance-prior × 4 pods, short window (2022-01-01
+→ 2025-12-31), sonnet, memory-on, 5-wide parallel pool, scored against the same fresh board as
+memory-on/off/mechanical. Results append here and as notebook §7.11 when the pool lands. This entry
+is the pre-registration; the numbers are not yet in.
+
+**Tests.** `tests/test_pm_*` unchanged and green (59 pass) after the wiring — the arms default to
+the shipped path (`include_reports=True`, `relevance_prior=False`), so the existing runs reproduce
+byte-for-byte. A dedicated arm test is TODO once the pilot validates the direction.
+
+**Results (pilot, short window 2022–2025, n≈48, `notebook §7.11`).** *Closes the pre-registration
+above.* (1) **numbers-only ≈ full — the prose is NOT load-bearing.** Stripping the reports to
+`(direction, conviction)` labels leaves P&L comparable-to-slightly-better (duration −0.009 vs
+mem_on −0.005; front_end +0.012 vs +0.001; curve +0.003 vs −0.005; real −0.003 vs −0.007) and the
+own-driver-IC weighting unchanged (corr(weight, own-IC) 0.8–1.0, same as full). The PM's decision
+is a mechanical conviction pass-through; the analytical narrative is decorative for the trade. (2)
+**relevance-prior helps on the two directional pods** — duration +0.019 (t +0.91, vs mem_on −0.005)
+and front_end +0.030 (t +1.68, the best arm of any run) — and on **duration it rotated corr(weight,
+trade-IC) from −0.10 to +0.10**: the first evidence the confidence-vs-relevance mis-weight (§7.10)
+is *prompt-correctable* (H1 partially supported). It did **not** help curve (slope) or real
+(breakeven) — different axes than the rate-specific prior — and front_end's gain came *without*
+weight rotation (corr stayed −0.40), so a second channel (sizing/timing) also moves it. **Caveat:**
+every arm sits at t<2 on n≈48 and the weight correlations are 4–5-point rank corrs — directional
+pilot evidence, not a result. **Next:** a full-window relevance-prior run on duration + front_end
+for a clean P&L read, and a learned walk-forward relevance weight as the mechanical alternative if
+the prompt gain does not hold.
+
+---
+
+## 2026-07-23 — v0 mechanical relevance combiner + v1 hybrid (`src/layered/pm/relevance_pm.py`, `hybrid_pm.py`)
+
+**Decision.** Split signal *generation* (LLM analysts) from signal *combination* (mechanical), the
+standard alpha-combination pattern. **v0** (`relevance_pm.py`) weights each analyst's oriented view
+by its **walk-forward trailing IC to the traded instrument** (its trade relevance), not by
+conviction — fixing the confidence-vs-relevance mis-weight (§7.10) with arithmetic, not prompting.
+The weighting is pluggable (`equal, ic, ir, rank_topk, ridge`); **ic** is the pre-registered
+primary. **v1** (`hybrid_pm.py`) is anchor-and-adjust: v0 sets the baseline weight, an LLM may nudge
+each by a bounded, report-justified multiplier in [0.5, 2.0] — making the report load-bearing by
+construction. Both write the mechanical JSONL schema and are scored by `trade_pnl` head-to-head.
+
+**Result (full window 2016–2025, `notebook §7.12–7.13`).** **v0 works.** `ic` roughly *doubles* the
+mean trade P&L over the mechanical baseline on all three trading pods (duration +0.0215 vs +0.0105;
+front_end +0.0343 vs +0.0163; real +0.0242 vs +0.0129) and is the **first arm in the study to clear
+t≈2** (real ic t=2.02; real/duration rank_topk ~2.0). Sanity holds: `equal` reproduces mechanical
+exactly, `ridge` overfits at N=5/T≈120 (worst everywhere). **v1 ≈ v0** — the LLM adjustment is
+marginally better on duration (+0.0243), *worse* on front_end (+0.0285 vs v0 +0.0343), identical on
+real (+0.0246). So even with the weighting fixed and the report's job narrowed to "adjust the prior,"
+the reports do **not** add value: the dilution hypothesis is not confirmed.
+
+**Conclusion.** The alpha is the **mechanical relevance weighting (v0)**, deterministic, auditable,
+free. The LLM's value in this pipeline is *signal generation* at the analyst layer, not combination
+or adjustment. Ship v0; keep v1 as a documented negative result. curve (opposed pod) abstains
+mechanically and is excluded from the trade head-to-head.
+
+**Caveat.** Relevance is estimated from ~12 obs/yr, so the trailing IC is noisy (hence shrinkage),
+and the 5-scheme sweep invites multiple-comparisons — `ic` was pre-registered to avoid cherry-picking
+`rank_topk`. Walk-forward is enforced (weight at t uses only outcomes realized before t), but the
+board it reads is LLM-analyst output, so the analyst-layer cutoff-leak question (`§7.9` shows no
+post-2024 collapse) is separate and unclosed.
+
+**Tests.** `tests/test_relevance_pm.py` (4): equal==mechanical, the predictive analyst gets more
+weight, warm-up zero-weight → equal fallback, and no-look-ahead (weights unchanged by later dates).
+Full suite 208 → 212.
+
+---
+
+## 2026-07-23 — The text channel is essential (none / cue / whole, two-stage) (`notebook §7.14`)
+
+**Decision.** Re-run the 6 trading-pod analysts with `--text-mode {none, cue, whole}` (numbers only /
+driver-partitioned FOMC text = the shipped board / the whole un-partitioned statement), same
+model/window/memory, and score two ways: analyst layer (own-IC, trade-IC) and end-to-end (each board
+combined by v0 → trade P&L). Motivated by v1 ≈ v0 (reports inert at the PM) and the phase-1 "number
+anchors, words inform" deck slide.
+
+**Result.** At the **analyst layer** the crude metric looked flat — own-IC ≈ 0.265 for all three, and
+|trade-IC| vs one axis ≈ 0.10 (cue) / 0.10 (none) / 0.09 (whole). This is **misleading**: it uses a
+single axis and drops the sign. The **end-to-end v0 trade P&L is the honest test**, and it reverses
+the read: **cue > none > whole**. duration cue +0.0215 vs none −0.0035 vs whole −0.0068; front_end
++0.0343 vs +0.0004 vs −0.0072; real +0.0242 vs +0.0229 vs +0.0162. Stripping text collapses v0's edge
+(duration negative, front_end zero); un-partitioning it is worse on every pod (contamination, no
+reaction-function bonus).
+
+**Conclusion.** The cued text is **essential, not inert** — it lives in the analyst's directional
+*number*, which carries downstream; the shipped partitioned-text design is **validated** and `whole`
+is a regression. This reconciles with numbers-only ≈ full (§7.11): the PM needs the analyst's number
+(text-improved), not the report prose. So the redundant parts of the pipeline are the LLM *PM* and the
+report *prose* — **not** the text. The lever is NOT "give the analyst whole text."
+
+**Caveat.** One LLM run per arm (the cue board is the pre-existing one, so run-to-run sampling noise is
+uncontrolled), t-stats ~1–2, and the analyst-layer proxy was crude. But cue > none holds on all three
+pods, the robustness the study relies on.

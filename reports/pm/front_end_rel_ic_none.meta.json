@@ -1,0 +1,180 @@
+{
+  "config": {
+    "pod": "front_end",
+    "board": "reports/ab",
+    "board_suffix": "_none",
+    "start": "2016-01-01",
+    "end": "2025-12-31",
+    "limit": null,
+    "no_identity_check": true,
+    "relevance": true,
+    "weighting": "ic",
+    "min_obs": 12,
+    "shrink_k": 8.0,
+    "topk": null,
+    "ridge_alpha": 5.0,
+    "out": "reports/pm/front_end_rel_ic_none.jsonl"
+  },
+  "pod": "front_end",
+  "kind": "relevance:ic",
+  "listens_to": [
+    "labor_tightness",
+    "inflation",
+    "financial_conditions",
+    "balance_sheet"
+  ],
+  "polarity": {
+    "labor_tightness": -1.0,
+    "inflation": 1.0,
+    "financial_conditions": 1.0,
+    "balance_sheet": -1.0
+  },
+  "clock_freq": "ME",
+  "answer_space": "driver",
+  "memory": false,
+  "board_thresholds": {
+    "stale_after_days": 45,
+    "expire_after_days": 95
+  },
+  "system_prompt": "RELEVANCE PM (v0) \u2014 a deterministic combiner that weights each analyst's oriented view by a walk-forward estimate of its trade relevance (weighting scheme is configurable), instead of by conviction. Warm-up / all-cold meetings fall back to the equal-weight panel mean (= the mechanical baseline). No look-ahead: weights at t use only outcomes realized before t; nothing is fitted to the future.\n\npod: front_end\nweighting: ic min_obs: 12 shrink_k: 8.0 topk: None ridge_alpha: 5.0\nrule: single/level pod \u2014 representative leg sign(rate-axis projection)",
+  "disagreement": "pm.disagreement.panel_disagreement (computed, not asked)",
+  "n_meetings": 120,
+  "window": [
+    "2016-01-31",
+    "2025-12-31"
+  ],
+  "board_sources": {
+    "balance_sheet": {
+      "path": "reports/ab/balance_sheet_none.jsonl",
+      "sha256": "6926923a31ff5574954b567b1866193348467a5c20541383cced003c9b69f48e",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "balance_sheet",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "none",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/balance_sheet_none.jsonl"
+      },
+      "clock": "WALCL",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "financial_conditions": {
+      "path": "reports/ab/financial_conditions_none.jsonl",
+      "sha256": "f579cd01b658dbbff35f8db25ac4a1d4cd4f4c912ba687a7802c11c6cc7be129",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "financial_conditions",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "none",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/financial_conditions_none.jsonl"
+      },
+      "clock": "NFCI",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation_expectations": {
+      "path": "reports/ab/inflation_expectations_none.jsonl",
+      "sha256": "68bddd403a1e2c1263e0776a1139e574c52ee1255a1c885d5aa877a07527d0ff",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation_expectations",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "none",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/inflation_expectations_none.jsonl"
+      },
+      "clock": "T10YIE",
+      "horizon_label": "month end, roughly one month ahead"
+    },
+    "inflation": {
+      "path": "reports/ab/inflation_none.jsonl",
+      "sha256": "80b6eacfa036eb4c241349f0f7038e26f2292bcf3044b4427e719635f113ba40",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "inflation",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "none",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/inflation_none.jsonl"
+      },
+      "clock": "CPIAUCSL",
+      "horizon_label": "the next monthly CPI release (roughly one month ahead)"
+    },
+    "labor_tightness": {
+      "path": "reports/ab/labor_tightness_none.jsonl",
+      "sha256": "7379f5aee5344116d14cfe988db12ce81b4f41a2c927bb58886bbb2daeabcddf",
+      "n": 119,
+      "n_degraded": 0,
+      "config": {
+        "driver": "labor_tightness",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "none",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/labor_tightness_none.jsonl"
+      },
+      "clock": "UNRATE",
+      "horizon_label": "the next monthly jobs report (roughly one month ahead)"
+    },
+    "term_premium": {
+      "path": "reports/ab/term_premium_none.jsonl",
+      "sha256": "cf2d9b42b3398b1f847ff17a575277959e64f72abf6ed2fd878e73838839d261",
+      "n": 120,
+      "n_degraded": 0,
+      "config": {
+        "driver": "term_premium",
+        "start": "2016-01-01",
+        "end": "2025-12-31",
+        "text_mode": "none",
+        "text_doc": "statement",
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "limit": null,
+        "describe_features": false,
+        "memory": true,
+        "perturb": null,
+        "out": "reports/ab/term_premium_none.jsonl"
+      },
+      "clock": "DGS10",
+      "horizon_label": "month end, roughly one month ahead"
+    }
+  }
+}
