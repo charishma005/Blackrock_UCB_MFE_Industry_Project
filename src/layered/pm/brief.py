@@ -126,19 +126,22 @@ def _entry_block(entry: BoardEntry, horizon: str, *, include_reports: bool,
         status.append("unchanged since its previous report (its evidence had not moved)")
     lines.append("Status: " + "; ".join(status) + ".")
 
-    if include_reports and (v.report or v.reasoning):
-        body = (v.report or v.reasoning).strip()
-        if max_report_words:
-            words = body.split()
-            if len(words) > max_report_words:
-                body = " ".join(words[:max_report_words]) + " […]"
-        lines.append("Report:")
-        lines.extend("  " + ln for ln in body.splitlines())
-
-    if v.falsifier:
-        lines.append(f"Would change its mind if: {v.falsifier}")
-    if v.key_evidence:
-        lines.append(f"Leaned on: {', '.join(v.key_evidence)}")
+    # include_reports=False is the numbers-only reasoning arm: strip ALL analyst text
+    # (report, falsifier, evidence names) so only the (direction, conviction) label
+    # remains. A gap vs the full arm then isolates whether any of the prose is load-bearing.
+    if include_reports:
+        if v.report or v.reasoning:
+            body = (v.report or v.reasoning).strip()
+            if max_report_words:
+                words = body.split()
+                if len(words) > max_report_words:
+                    body = " ".join(words[:max_report_words]) + " […]"
+            lines.append("Report:")
+            lines.extend("  " + ln for ln in body.splitlines())
+        if v.falsifier:
+            lines.append(f"Would change its mind if: {v.falsifier}")
+        if v.key_evidence:
+            lines.append(f"Leaned on: {', '.join(v.key_evidence)}")
     return "\n".join(lines)
 
 

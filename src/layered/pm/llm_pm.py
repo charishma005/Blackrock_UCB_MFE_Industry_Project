@@ -141,6 +141,25 @@ _ABSTENTION = """You are not required to have a view on every driver. Leaving a 
 out is a legitimate answer when the panel gives you no basis for one, and is better
 than a confident number you cannot justify from what you were shown."""
 
+# ── relevance prior (evaluation arm) ────────────────────────────────────────
+# The PM's failure mode is to weight by conviction, but conviction measures an analyst's
+# certainty about ITS OWN driver, not that driver's impact on the instrument being traded.
+# Those come apart: a driver that is easy to forecast with high conviction is usually a
+# slow, smooth series that is already anticipated and priced, so its high conviction
+# carries little trading value; the tradable surprise lives in the harder-to-forecast
+# reaction-function drivers. This block states that principle as domain knowledge — not
+# the empirical IC numbers — so the arm tests whether the PM can reweight when told.
+_RELEVANCE_PRIOR = """Weight each analyst by how much its driver actually moves the
+instrument you trade, not by how confident the analyst sounds. Conviction measures an
+analyst's certainty about its own driver, which is not the same as that driver's market
+impact — and the two often diverge: a driver that can be forecast with high conviction is
+usually one that moves slowly and is already anticipated and priced, so a confident read
+on it carries little trading value. For rates, the near-term reaction function (labour and
+inflation) is what tends to reprice yields; slow balance-sheet and financial-conditions
+readings are largely priced already. Down-weight a confident call on a slow, well-
+anticipated driver relative to a live read on a driver that actually repositions the
+curve, and say in your notes which analysts you judged trade-relevant and why."""
+
 # ── memory ──────────────────────────────────────────────────────────────────
 # The PM used to be stateless: it never saw its own previous arbitration or the trade it
 # was already carrying, so every meeting re-derived a position from nothing. Measured on
@@ -497,11 +516,19 @@ class LLMPM:
 
     def __init__(self, pod: str, config: dict, llm=None,
                  max_report_words: Optional[int] = None, blind: Optional[str] = None,
-                 use_memory: bool = False, perturbation=None):
+                 use_memory: bool = False, perturbation=None,
+                 include_reports: bool = True, relevance_prior: bool = False):
         self.pod = pod
         self.config = config
         self.llm = llm
         self.max_report_words = max_report_words
+        # Evaluation arms for the reasoning battery. ``include_reports=False`` renders
+        # each analyst as its (direction, conviction) label with the prose stripped, so
+        # a gap vs the full arm isolates whether the reasoning text is load-bearing.
+        # ``relevance_prior`` adds a mandate note that conviction is not market impact,
+        # to test whether telling the PM that fixes the confidence-vs-relevance mis-weight.
+        self.include_reports = include_reports
+        self.relevance_prior = relevance_prior
         # The control arm: render one analyst's report instead of the panel, so the
         # PM structurally cannot arbitrate. Shares the renderer with the full arm so
         # the two differ in what is shown and in nothing else.
@@ -611,6 +638,8 @@ class LLMPM:
                 "You have been shown one analyst's report. Report only on that "
                 "analyst's driver."
             )
+        if self.relevance_prior:
+            parts.append(_RELEVANCE_PRIOR)
         parts.append(_CALIBRATION_RATE if self.answer_space == "rate"
                      else _CALIBRATION_DRIVER)
         parts.append(_ABSTENTION)
@@ -658,7 +687,8 @@ class LLMPM:
         """The brief. ``memory`` defaults to None so every caller that inspects a prompt
         without running a meeting — the dry-run above all — keeps working unchanged."""
         brief = render_brief(meeting, drivers=self.reads,
-                             max_report_words=self.max_report_words, blind=self.blind)
+                             max_report_words=self.max_report_words, blind=self.blind,
+                             include_reports=self.include_reports)
         prompt = brief if memory is None else f"{self._render_memory(memory)}\n\n{brief}"
         # String-level perturbations (whitespace, scaffolding rewording) act on the
         # assembled prompt, here, so ``arbitrate`` (which re-renders through this method)
