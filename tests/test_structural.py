@@ -84,6 +84,30 @@ def test_no_trade_config_is_none():
                             pod="x", asof="2023-06-30") is None
 
 
+def test_shipped_curve_pod_declares_leg_roles_and_decomposes():
+    """Not a synthetic config — the real ``curve.yaml`` on disk. The mechanism above only
+    fires if the pod actually declares ``leg_roles``; this pins that the shipped curve seat
+    does, so the structural layer trades the slope pod instead of abstaining. Guards the
+    config line itself against a rename or a dropped key."""
+    import yaml
+    from src.layered.pm.mechanical_pm import POD_DIR
+
+    cfg = yaml.safe_load((POD_DIR / "curve.yaml").read_text())
+    trade_cfg = cfg["trade"]
+    pol = {d: float((c or {}).get("polarity", 1.0))
+           for d, c in cfg["listens_to"].items()}
+    assert trade_cfg.get("sign_convention") == "opposed"
+    roles = trade_cfg.get("leg_roles") or {}
+    assert roles.get("front") in trade_cfg["universe"]
+    assert roles.get("long") in trade_cfg["universe"]
+    # term_premium +1 calling 'up' is long-end pressure → a steepener, equal and opposite.
+    t = structural_trade({"term_premium": 0.8}, pol, trade_cfg,
+                         pod="curve", asof="2023-06-30")
+    assert t is not None
+    assert t.legs[roles["long"]] > 0 and t.legs[roles["front"]] < 0
+    assert abs(t.legs[roles["long"]] + t.legs[roles["front"]]) < 1e-9
+
+
 # ── the harness: driver block preserved, only the trade rebuilt ──────────────
 def _llm_record(asof, drivers, llm_legs, degraded=False):
     return {"asof": asof, "degraded": degraded,
